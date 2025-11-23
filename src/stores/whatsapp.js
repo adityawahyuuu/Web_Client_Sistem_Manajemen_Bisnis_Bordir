@@ -81,6 +81,25 @@ export async function logoutWhatsApp() {
   }
 }
 
+export async function clearWhatsAppSession() {
+  whatsappLoading.set(true);
+  try {
+    const result = await whatsappService.clearSession();
+    whatsappStatus.set({
+      status: 'disconnected',
+      qrCode: null,
+      pairingCode: null,
+      phoneNumber: null
+    });
+    return result;
+  } catch (error) {
+    console.error('Error clearing WhatsApp session:', error);
+    throw error;
+  } finally {
+    whatsappLoading.set(false);
+  }
+}
+
 export async function sendInvoiceViaWhatsApp(invoiceId, phoneNumber = null, message = null) {
   whatsappLoading.set(true);
   try {

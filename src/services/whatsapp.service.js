@@ -58,6 +58,12 @@ export const whatsappService = {
     return response.data || response;
   },
 
+  // Clear WhatsApp session (admin only)
+  async clearSession() {
+    const response = await api.post('/whatsapp/clear-session');
+    return response.data || response;
+  },
+
   // Send invoice via WhatsApp
   async sendInvoice(invoiceId, phoneNumber = null, message = null) {
     const body = {};
