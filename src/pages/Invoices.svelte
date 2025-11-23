@@ -4,8 +4,11 @@
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
   import { sendInvoiceToMultiple } from '../stores/whatsapp.js';
+  import invoiceService from '../services/invoice.service.js';
   import Modal from '../components/Modal.svelte';
   import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
+
+  let downloadingId = null;
 
   onMount(() => {
     loadInvoices();
@@ -179,6 +182,31 @@
     const labels = { draft: 'Draft', sent: 'Terkirim', paid: 'Lunas' };
     return { class: badges[status] || badges.draft, label: labels[status] || status };
   }
+
+  async function handleDownload(invoice) {
+    downloadingId = invoice.id;
+    try {
+      // Generate document first
+      await invoiceService.generate(invoice.id);
+
+      // Then download
+      const blob = await invoiceService.download(invoice.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoice.invoice_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      success('Invoice berhasil diunduh');
+    } catch (error) {
+      showError('Gagal mengunduh invoice: ' + error.message);
+    } finally {
+      downloadingId = null;
+    }
+  }
 </script>
 
 <div>
@@ -240,6 +268,13 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                  <button
+                    on:click={() => handleDownload(invoice)}
+                    class="text-purple-600 hover:text-purple-800"
+                    disabled={downloadingId === invoice.id}
+                  >
+                    {downloadingId === invoice.id ? 'Mengunduh...' : 'Download'}
+                  </button>
                   <button
                     on:click={() => openWhatsAppModal(invoice)}
                     class="text-green-600 hover:text-green-800"

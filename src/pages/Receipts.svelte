@@ -5,8 +5,11 @@
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
   import { sendReceiptToMultiple } from '../stores/whatsapp.js';
+  import receiptService from '../services/receipt.service.js';
   import Modal from '../components/Modal.svelte';
   import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
+
+  let downloadingId = null;
 
   onMount(() => {
     loadReceipts();
@@ -140,6 +143,31 @@
     const labels = { cash: 'Tunai', transfer: 'Transfer', other: 'Lainnya' };
     return labels[method] || method;
   }
+
+  async function handleDownload(receipt) {
+    downloadingId = receipt.id;
+    try {
+      // Generate document first
+      await receiptService.generate(receipt.id);
+
+      // Then download
+      const blob = await receiptService.download(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      success('Kwitansi berhasil diunduh');
+    } catch (error) {
+      showError('Gagal mengunduh kwitansi: ' + error.message);
+    } finally {
+      downloadingId = null;
+    }
+  }
 </script>
 
 <div>
@@ -198,6 +226,13 @@
                   {getPaymentMethodLabel(receipt.payment_method)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                  <button
+                    on:click={() => handleDownload(receipt)}
+                    class="text-purple-600 hover:text-purple-800"
+                    disabled={downloadingId === receipt.id}
+                  >
+                    {downloadingId === receipt.id ? 'Mengunduh...' : 'Download'}
+                  </button>
                   <button
                     on:click={() => openWhatsAppModal(receipt)}
                     class="text-green-600 hover:text-green-800"

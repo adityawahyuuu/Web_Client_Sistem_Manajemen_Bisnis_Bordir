@@ -5,8 +5,11 @@
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
   import { sendWaybillToMultiple } from '../stores/whatsapp.js';
+  import waybillService from '../services/waybill.service.js';
   import Modal from '../components/Modal.svelte';
   import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
+
+  let downloadingId = null;
 
   onMount(() => {
     loadWaybills();
@@ -176,6 +179,31 @@
     const labels = { pending: 'Pending', shipped: 'Dikirim', delivered: 'Terkirim' };
     return { class: badges[status] || badges.pending, label: labels[status] || status };
   }
+
+  async function handleDownload(waybill) {
+    downloadingId = waybill.id;
+    try {
+      // Generate document first
+      await waybillService.generate(waybill.id);
+
+      // Then download
+      const blob = await waybillService.download(waybill.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${waybill.waybill_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      success('Surat jalan berhasil diunduh');
+    } catch (error) {
+      showError('Gagal mengunduh surat jalan: ' + error.message);
+    } finally {
+      downloadingId = null;
+    }
+  }
 </script>
 
 <div>
@@ -237,6 +265,13 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                  <button
+                    on:click={() => handleDownload(waybill)}
+                    class="text-purple-600 hover:text-purple-800"
+                    disabled={downloadingId === waybill.id}
+                  >
+                    {downloadingId === waybill.id ? 'Mengunduh...' : 'Download'}
+                  </button>
                   <button
                     on:click={() => openWhatsAppModal(waybill)}
                     class="text-green-600 hover:text-green-800"
