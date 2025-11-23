@@ -6,7 +6,8 @@
     initializeWhatsApp,
     getWhatsAppStatus,
     logoutWhatsApp,
-    requestPairingCode
+    requestPairingCode,
+    clearWhatsAppSession
   } from '../stores/whatsapp.js';
   import { success, error as showError } from '../stores/notifications.js';
 
@@ -69,6 +70,22 @@
       success('Kode pairing berhasil dibuat');
     } catch (error) {
       showError('Gagal membuat kode pairing: ' + error.message);
+    }
+  }
+
+  async function handleClearSession() {
+    if (!confirm('Hapus session WhatsApp? Anda perlu scan QR/pairing code lagi untuk connect.')) {
+      return;
+    }
+    try {
+      const result = await clearWhatsAppSession();
+      if (result.data?.cleared) {
+        success('Session berhasil dihapus');
+      } else {
+        success(result.message || 'Session berhasil dihapus');
+      }
+    } catch (error) {
+      showError('Gagal menghapus session: ' + error.message);
     }
   }
 
@@ -210,7 +227,7 @@
     {/if}
   </div>
 
-  <div class="card">
+  <div class="card mb-6">
     <h2 class="text-lg font-semibold mb-4">Panduan Penggunaan</h2>
     <ul class="list-disc list-inside text-gray-600 space-y-2">
       <li>Pastikan HP Anda terhubung ke internet saat menggunakan WhatsApp</li>
@@ -218,6 +235,21 @@
       <li>Anda dapat mengirim invoice, kwitansi, dan surat jalan dari halaman masing-masing</li>
       <li>Jika koneksi terputus, kembali ke halaman ini untuk menghubungkan ulang</li>
     </ul>
+  </div>
+
+  <div class="card">
+    <h2 class="text-lg font-semibold mb-4">Troubleshooting</h2>
+    <p class="text-gray-600 mb-4">
+      Gunakan tombol di bawah jika mengalami masalah seperti QR code tidak muncul,
+      error connection berulang, atau ingin ganti akun WhatsApp.
+    </p>
+    <button
+      class="btn-danger"
+      on:click={handleClearSession}
+      disabled={$whatsappLoading}
+    >
+      {$whatsappLoading ? 'Menghapus...' : 'Clear Session'}
+    </button>
   </div>
 </div>
 
