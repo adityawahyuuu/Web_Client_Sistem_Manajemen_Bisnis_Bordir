@@ -66,6 +66,10 @@
       return;
     }
     try {
+      // 1. Initialize first
+      await initializeWhatsApp();
+
+      // 2. Then request pairing code
       await requestPairingCode(pairingPhoneNumber.trim());
       success('Kode pairing berhasil dibuat');
     } catch (error) {
