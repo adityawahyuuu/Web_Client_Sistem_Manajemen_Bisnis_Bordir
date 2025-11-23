@@ -4,6 +4,7 @@ import whatsappService from '../services/whatsapp.service.js';
 export const whatsappStatus = writable({
   status: 'disconnected',
   qrCode: null,
+  pairingCode: null,
   phoneNumber: null
 });
 export const whatsappLoading = writable(false);
@@ -15,11 +16,31 @@ export async function initializeWhatsApp() {
     whatsappStatus.set({
       status: result.status || 'connecting',
       qrCode: result.qrCode || null,
+      pairingCode: result.pairingCode || null,
       phoneNumber: result.phoneNumber || null
     });
     return result;
   } catch (error) {
     console.error('Error initializing WhatsApp:', error);
+    throw error;
+  } finally {
+    whatsappLoading.set(false);
+  }
+}
+
+export async function requestPairingCode(phoneNumber) {
+  whatsappLoading.set(true);
+  try {
+    const result = await whatsappService.requestPairingCode(phoneNumber);
+    whatsappStatus.set({
+      status: result.status || 'connecting',
+      qrCode: result.qrCode || null,
+      pairingCode: result.pairingCode || null,
+      phoneNumber: result.phoneNumber || null
+    });
+    return result;
+  } catch (error) {
+    console.error('Error requesting pairing code:', error);
     throw error;
   } finally {
     whatsappLoading.set(false);
@@ -32,6 +53,7 @@ export async function getWhatsAppStatus() {
     whatsappStatus.set({
       status: result.status || 'disconnected',
       qrCode: result.qrCode || null,
+      pairingCode: result.pairingCode || null,
       phoneNumber: result.phoneNumber || null
     });
     return result;
@@ -48,6 +70,7 @@ export async function logoutWhatsApp() {
     whatsappStatus.set({
       status: 'disconnected',
       qrCode: null,
+      pairingCode: null,
       phoneNumber: null
     });
   } catch (error) {
