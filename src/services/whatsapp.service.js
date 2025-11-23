@@ -7,6 +7,12 @@ export const whatsappService = {
     return response.data || response;
   },
 
+  // Request pairing code for mobile (admin only)
+  async requestPairingCode(phoneNumber) {
+    const response = await api.post('/whatsapp/pairing-code', { phoneNumber });
+    return response.data || response;
+  },
+
   // Get connection status
   async getStatus() {
     try {

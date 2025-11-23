@@ -5,12 +5,14 @@
     whatsappLoading,
     initializeWhatsApp,
     getWhatsAppStatus,
-    logoutWhatsApp
+    logoutWhatsApp,
+    requestPairingCode
   } from '../stores/whatsapp.js';
   import { success, error as showError } from '../stores/notifications.js';
 
   let pollingInterval = null;
   let isMobile = false;
+  let pairingPhoneNumber = '';
 
   // Detect if user is on mobile device
   function detectMobile() {
@@ -55,6 +57,19 @@
 
   async function handleRefresh() {
     await getWhatsAppStatus();
+  }
+
+  async function handleRequestPairingCode() {
+    if (!pairingPhoneNumber.trim()) {
+      showError('Masukkan nomor telepon WhatsApp Anda');
+      return;
+    }
+    try {
+      await requestPairingCode(pairingPhoneNumber.trim());
+      success('Kode pairing berhasil dibuat');
+    } catch (error) {
+      showError('Gagal membuat kode pairing: ' + error.message);
+    }
   }
 
   function getStatusColor(status) {
@@ -106,44 +121,62 @@
 
     {#if $whatsappStatus.status === 'disconnected'}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
-        <p class="text-gray-600 mb-4">
-          WhatsApp belum terhubung. Klik tombol di bawah untuk memulai koneksi dan scan QR code.
-        </p>
-        <button
-          class="btn-primary"
-          on:click={handleInitialize}
-          disabled={$whatsappLoading}
-        >
-          {$whatsappLoading ? 'Menginisialisasi...' : 'Hubungkan WhatsApp'}
-        </button>
-      </div>
-    {:else if $whatsappStatus.status === 'connecting' && $whatsappStatus.qrCode}
-      <div class="bg-gray-50 p-4 rounded-lg mb-4">
         {#if isMobile}
-          <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
-            <p class="text-yellow-800 font-medium mb-2">
-              Anda mengakses dari perangkat mobile
+          <p class="text-gray-600 mb-4">
+            Masukkan nomor telepon WhatsApp Anda untuk mendapatkan kode pairing 8 digit.
+          </p>
+          <div class="flex flex-col gap-3">
+            <input
+              type="tel"
+              bind:value={pairingPhoneNumber}
+              placeholder="Contoh: 081234567890"
+              class="input-field"
+            />
+            <button
+              class="btn-primary"
+              on:click={handleRequestPairingCode}
+              disabled={$whatsappLoading}
+            >
+              {$whatsappLoading ? 'Memproses...' : 'Dapatkan Kode Pairing'}
+            </button>
+          </div>
+        {:else}
+          <p class="text-gray-600 mb-4">
+            WhatsApp belum terhubung. Klik tombol di bawah untuk memulai koneksi dan scan QR code.
+          </p>
+          <button
+            class="btn-primary"
+            on:click={handleInitialize}
+            disabled={$whatsappLoading}
+          >
+            {$whatsappLoading ? 'Menginisialisasi...' : 'Hubungkan WhatsApp'}
+          </button>
+        {/if}
+      </div>
+    {:else if $whatsappStatus.status === 'connecting' && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
+      <div class="bg-gray-50 p-4 rounded-lg mb-4">
+        {#if isMobile && $whatsappStatus.pairingCode}
+          <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
+            <p class="text-blue-800 font-medium mb-3">
+              Hubungkan dengan Kode 8 Digit
             </p>
-            <p class="text-yellow-700 text-sm mb-3">
-              Untuk menghubungkan WhatsApp, Anda perlu scan QR code. Silakan buka halaman ini di komputer/laptop untuk dapat melakukan scan QR code dengan mudah.
+
+            <div class="bg-white border-2 border-blue-300 rounded-lg p-4 mb-4 text-center">
+              <p class="text-sm text-gray-600 mb-2">Masukkan kode ini di WhatsApp:</p>
+              <p class="text-3xl font-mono font-bold tracking-widest text-blue-600">
+                {$whatsappStatus.pairingCode}
+              </p>
+            </div>
+
+            <p class="text-blue-700 text-sm mb-2">
+              Cara menggunakan:
             </p>
-            <p class="text-yellow-700 text-sm">
-              Alternatif: Anda dapat menggunakan fitur "Link with Phone Number" di WhatsApp dengan cara:
-            </p>
-            <ol class="list-decimal list-inside text-yellow-700 text-sm mt-2 space-y-1">
+            <ol class="list-decimal list-inside text-blue-700 text-sm space-y-1">
               <li>Buka WhatsApp di HP Anda</li>
               <li>Ketuk titik tiga → Perangkat tertaut → Tautkan perangkat</li>
-              <li>Pilih "Link with phone number instead"</li>
-              <li>Masukkan kode 8 digit yang muncul di layar</li>
+              <li>Pilih "Tautkan dengan nomor telepon"</li>
+              <li>Masukkan kode 8 digit di atas</li>
             </ol>
-          </div>
-          <div class="flex justify-center">
-            <img
-              src={$whatsappStatus.qrCode}
-              alt="WhatsApp QR Code"
-              class="border rounded-lg max-w-full"
-              style="max-height: 200px;"
-            />
           </div>
         {:else}
           <p class="text-gray-600 mb-4">
@@ -191,5 +224,8 @@
 <style>
   .btn-danger {
     @apply px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
   }
 </style>
