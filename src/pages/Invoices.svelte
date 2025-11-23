@@ -3,7 +3,9 @@
   import { invoices, loadInvoices, addInvoice, updateInvoice, deleteInvoice } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
+  import { sendInvoiceToMultiple } from '../stores/whatsapp.js';
   import Modal from '../components/Modal.svelte';
+  import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
 
   onMount(() => {
     loadInvoices();
@@ -54,7 +56,7 @@
         customer_id: invoice.customer_id,
         invoice_date: invoice.invoice_date,
         due_date: invoice.due_date || '',
-        items: invoice.items.map(i => ({
+        items: (invoice.items || []).map(i => ({
           item_name: i.item_name || '',
           description: i.description || '',
           quantity: i.quantity || 1,
@@ -65,6 +67,9 @@
         notes: invoice.notes || '',
         status: invoice.status || 'draft'
       };
+      if (form.items.length === 0) {
+        form.items = [{ item_name: '', description: '', quantity: 1, unit_price: 0 }];
+      }
     } else {
       form = {
         customer_id: '',
@@ -135,14 +140,32 @@
     showWhatsAppModal = true;
   }
 
-  function sendWhatsApp() {
-    const customer = $customers.find(c => c.id === selectedInvoice.customer_id);
+  function getCustomerPhones(customerId) {
+    const customer = $customers.find(c => c.id === customerId);
     if (customer && customer.whatsapp_numbers && customer.whatsapp_numbers.length > 0) {
-      info(`Simulasi: Mengirim ${selectedInvoice.invoice_number} ke ${customer.whatsapp_numbers.join(', ')}`);
-      updateInvoice(selectedInvoice.id, { status: 'sent' });
-      success('Invoice berhasil dikirim via WhatsApp (simulasi)');
-    } else {
-      showError('Pelanggan tidak memiliki nomor WhatsApp');
+      return customer.whatsapp_numbers;
+    }
+    return [];
+  }
+
+  async function handleWhatsAppSend(event) {
+    const { phoneNumbers, message } = event.detail;
+    try {
+      const results = await sendInvoiceToMultiple(selectedInvoice.id, phoneNumbers, message);
+
+      if (results.success.length > 0) {
+        updateInvoice(selectedInvoice.id, { status: 'sent' });
+      }
+
+      if (results.failed.length === 0) {
+        success(`Invoice berhasil dikirim ke ${results.success.length} nomor via WhatsApp`);
+      } else if (results.success.length > 0) {
+        info(`Berhasil: ${results.success.length} nomor, Gagal: ${results.failed.length} nomor`);
+      } else {
+        showError(`Gagal mengirim ke semua nomor`);
+      }
+    } catch (error) {
+      showError('Gagal mengirim invoice: ' + error.message);
     }
     showWhatsAppModal = false;
   }
@@ -335,16 +358,12 @@
   </form>
 </Modal>
 
-<Modal bind:show={showWhatsAppModal} title="Kirim via WhatsApp" size="sm">
-  {#if selectedInvoice}
-    <div class="space-y-4">
-      <p class="text-gray-600">
-        Kirim <strong>{selectedInvoice.invoice_number}</strong> ke pelanggan?
-      </p>
-      <div class="flex justify-end gap-3">
-        <button class="btn-secondary" on:click={() => showWhatsAppModal = false}>Batal</button>
-        <button class="btn-success" on:click={sendWhatsApp}>Kirim</button>
-      </div>
-    </div>
-  {/if}
-</Modal>
+{#if selectedInvoice}
+  <WhatsAppSendModal
+    bind:show={showWhatsAppModal}
+    documentType="invoice"
+    documentNumber={selectedInvoice.invoice_number}
+    customerPhones={getCustomerPhones(selectedInvoice.customer_id)}
+    on:send={handleWhatsAppSend}
+  />
+{/if}

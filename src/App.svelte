@@ -9,6 +9,7 @@
   import Invoices from './pages/Invoices.svelte';
   import Waybills from './pages/Waybills.svelte';
   import Receipts from './pages/Receipts.svelte';
+  import WhatsAppSettings from './pages/WhatsAppSettings.svelte';
 
   $: if (!$isAuthenticated && typeof window !== 'undefined') {
     const path = window.location.pathname;
@@ -30,6 +31,7 @@
         <Route path="/invoices" component={Invoices} />
         <Route path="/waybills" component={Waybills} />
         <Route path="/receipts" component={Receipts} />
+        <Route path="/whatsapp" component={WhatsAppSettings} />
       </main>
     </div>
   {:else}
