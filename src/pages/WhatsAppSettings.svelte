@@ -10,16 +10,24 @@
   import { success, error as showError } from '../stores/notifications.js';
 
   let pollingInterval = null;
+  let isMobile = false;
+
+  // Detect if user is on mobile device
+  function detectMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (window.innerWidth <= 768);
+  }
 
   onMount(() => {
+    isMobile = detectMobile();
     getWhatsAppStatus();
 
-    // Poll status every 5 seconds when connecting
+    // Poll status every 2 minutes when connecting (give user time to scan QR)
     pollingInterval = setInterval(() => {
       if ($whatsappStatus.status === 'connecting') {
         getWhatsAppStatus();
       }
-    }, 5000);
+    }, 120000);
 
     return () => {
       if (pollingInterval) clearInterval(pollingInterval);
@@ -111,18 +119,46 @@
       </div>
     {:else if $whatsappStatus.status === 'connecting' && $whatsappStatus.qrCode}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
-        <p class="text-gray-600 mb-4">
-          Scan QR code di bawah menggunakan WhatsApp di HP Anda:
-        </p>
-        <div class="flex justify-center">
-          <img
-            src={$whatsappStatus.qrCode}
-            alt="WhatsApp QR Code"
-            class="border rounded-lg"
-          />
-        </div>
+        {#if isMobile}
+          <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
+            <p class="text-yellow-800 font-medium mb-2">
+              Anda mengakses dari perangkat mobile
+            </p>
+            <p class="text-yellow-700 text-sm mb-3">
+              Untuk menghubungkan WhatsApp, Anda perlu scan QR code. Silakan buka halaman ini di komputer/laptop untuk dapat melakukan scan QR code dengan mudah.
+            </p>
+            <p class="text-yellow-700 text-sm">
+              Alternatif: Anda dapat menggunakan fitur "Link with Phone Number" di WhatsApp dengan cara:
+            </p>
+            <ol class="list-decimal list-inside text-yellow-700 text-sm mt-2 space-y-1">
+              <li>Buka WhatsApp di HP Anda</li>
+              <li>Ketuk titik tiga → Perangkat tertaut → Tautkan perangkat</li>
+              <li>Pilih "Link with phone number instead"</li>
+              <li>Masukkan kode 8 digit yang muncul di layar</li>
+            </ol>
+          </div>
+          <div class="flex justify-center">
+            <img
+              src={$whatsappStatus.qrCode}
+              alt="WhatsApp QR Code"
+              class="border rounded-lg max-w-full"
+              style="max-height: 200px;"
+            />
+          </div>
+        {:else}
+          <p class="text-gray-600 mb-4">
+            Scan QR code di bawah menggunakan WhatsApp di HP Anda:
+          </p>
+          <div class="flex justify-center">
+            <img
+              src={$whatsappStatus.qrCode}
+              alt="WhatsApp QR Code"
+              class="border rounded-lg"
+            />
+          </div>
+        {/if}
         <p class="text-sm text-gray-500 mt-4 text-center">
-          QR code akan diperbarui otomatis jika expired
+          QR code akan diperbarui otomatis setiap 2 menit
         </p>
       </div>
     {:else if $whatsappStatus.status === 'connected'}
