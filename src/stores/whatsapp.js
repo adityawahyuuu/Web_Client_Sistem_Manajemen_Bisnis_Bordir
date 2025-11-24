@@ -5,7 +5,8 @@ export const whatsappStatus = writable({
   status: 'disconnected',
   qrCode: null,
   pairingCode: null,
-  phoneNumber: null
+  phoneNumber: null,
+  error: null
 });
 export const whatsappLoading = writable(false);
 
@@ -14,14 +15,26 @@ export async function initializeWhatsApp(phoneNumber = null) {
   whatsappLoading.set(true);
   try {
     const result = await whatsappService.initialize(phoneNumber);
-    // Handle response yang mungkin di-wrap dalam data object
-    const data = result.data || result;
-    console.log('Initialize WhatsApp response:', data);
+
+    // Debug: log full response
+    console.log('Initialize WhatsApp raw result:', JSON.stringify(result, null, 2));
+
+    // Handle berbagai kemungkinan struktur response
+    let data = result;
+    if (result && result.data) {
+      data = result.data;
+    }
+
+    console.log('Initialize WhatsApp extracted data:', JSON.stringify(data, null, 2));
+    console.log('pairingCode:', data.pairingCode);
+    console.log('qrCode exists:', !!data.qrCode);
+
     whatsappStatus.set({
       status: data.status || 'connecting',
       qrCode: data.qrCode || null,
       pairingCode: data.pairingCode || null,
-      phoneNumber: data.phoneNumber || null
+      phoneNumber: data.phoneNumber || null,
+      error: data.error || null
     });
     return result;
   } catch (error) {
@@ -41,7 +54,8 @@ export async function getWhatsAppStatus() {
       status: data.status || 'disconnected',
       qrCode: data.qrCode || null,
       pairingCode: data.pairingCode || null,
-      phoneNumber: data.phoneNumber || null
+      phoneNumber: data.phoneNumber || null,
+      error: data.error || null
     });
     return result;
   } catch (error) {
