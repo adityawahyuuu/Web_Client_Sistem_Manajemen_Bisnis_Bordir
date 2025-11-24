@@ -14,11 +14,14 @@ export async function initializeWhatsApp(phoneNumber = null) {
   whatsappLoading.set(true);
   try {
     const result = await whatsappService.initialize(phoneNumber);
+    // Handle response yang mungkin di-wrap dalam data object
+    const data = result.data || result;
+    console.log('Initialize WhatsApp response:', data);
     whatsappStatus.set({
-      status: result.status || 'connecting',
-      qrCode: result.qrCode || null,
-      pairingCode: result.pairingCode || null,
-      phoneNumber: result.phoneNumber || null
+      status: data.status || 'connecting',
+      qrCode: data.qrCode || null,
+      pairingCode: data.pairingCode || null,
+      phoneNumber: data.phoneNumber || null
     });
     return result;
   } catch (error) {
@@ -32,11 +35,13 @@ export async function initializeWhatsApp(phoneNumber = null) {
 export async function getWhatsAppStatus() {
   try {
     const result = await whatsappService.getStatus();
+    // Handle response yang mungkin di-wrap dalam data object
+    const data = result.data || result;
     whatsappStatus.set({
-      status: result.status || 'disconnected',
-      qrCode: result.qrCode || null,
-      pairingCode: result.pairingCode || null,
-      phoneNumber: result.phoneNumber || null
+      status: data.status || 'disconnected',
+      qrCode: data.qrCode || null,
+      pairingCode: data.pairingCode || null,
+      phoneNumber: data.phoneNumber || null
     });
     return result;
   } catch (error) {
