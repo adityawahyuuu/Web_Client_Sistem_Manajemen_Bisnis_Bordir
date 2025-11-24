@@ -2,14 +2,10 @@ import api from './api.js';
 
 export const whatsappService = {
   // Initialize WhatsApp connection (admin only)
-  async initialize() {
-    const response = await api.post('/whatsapp/initialize');
-    return response.data || response;
-  },
-
-  // Request pairing code for mobile (admin only)
-  async requestPairingCode(phoneNumber) {
-    const response = await api.post('/whatsapp/pairing-code', { phoneNumber });
+  // For mobile: pass phoneNumber to get pairing code directly
+  async initialize(phoneNumber = null) {
+    const body = phoneNumber ? { phoneNumber } : {};
+    const response = await api.post('/whatsapp/initialize', body);
     return response.data || response;
   },
 

@@ -9,10 +9,11 @@ export const whatsappStatus = writable({
 });
 export const whatsappLoading = writable(false);
 
-export async function initializeWhatsApp() {
+// For mobile: pass phoneNumber to get pairing code directly
+export async function initializeWhatsApp(phoneNumber = null) {
   whatsappLoading.set(true);
   try {
-    const result = await whatsappService.initialize();
+    const result = await whatsappService.initialize(phoneNumber);
     whatsappStatus.set({
       status: result.status || 'connecting',
       qrCode: result.qrCode || null,
@@ -22,25 +23,6 @@ export async function initializeWhatsApp() {
     return result;
   } catch (error) {
     console.error('Error initializing WhatsApp:', error);
-    throw error;
-  } finally {
-    whatsappLoading.set(false);
-  }
-}
-
-export async function requestPairingCode(phoneNumber) {
-  whatsappLoading.set(true);
-  try {
-    const result = await whatsappService.requestPairingCode(phoneNumber);
-    whatsappStatus.set({
-      status: result.status || 'connecting',
-      qrCode: result.qrCode || null,
-      pairingCode: result.pairingCode || null,
-      phoneNumber: result.phoneNumber || null
-    });
-    return result;
-  } catch (error) {
-    console.error('Error requesting pairing code:', error);
     throw error;
   } finally {
     whatsappLoading.set(false);
