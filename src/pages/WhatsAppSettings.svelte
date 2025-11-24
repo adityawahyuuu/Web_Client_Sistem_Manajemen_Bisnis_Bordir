@@ -13,6 +13,7 @@
   let pollingInterval = null;
   let isMobile = false;
   let pairingPhoneNumber = '';
+  let mobileMethod = 'pairing'; // 'pairing' atau 'qr'
 
   // Detect if user is on mobile device
   function detectMobile() {
@@ -42,6 +43,16 @@
       success('Inisialisasi WhatsApp berhasil');
     } catch (error) {
       showError('Gagal menginisialisasi WhatsApp: ' + error.message);
+    }
+  }
+
+  async function handleMobileQRInitialize() {
+    try {
+      // Initialize without phoneNumber to get QR code
+      await initializeWhatsApp();
+      success('QR code berhasil dibuat');
+    } catch (error) {
+      showError('Gagal membuat QR code: ' + error.message);
     }
   }
 
@@ -139,24 +150,53 @@
     {#if $whatsappStatus.status === 'disconnected'}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
         {#if isMobile}
-          <p class="text-gray-600 mb-4">
-            Masukkan nomor telepon WhatsApp Anda untuk mendapatkan kode pairing 8 digit.
-          </p>
-          <div class="flex flex-col gap-3">
-            <input
-              type="tel"
-              bind:value={pairingPhoneNumber}
-              placeholder="Contoh: 081234567890"
-              class="input-field"
-            />
+          <!-- Pilihan metode untuk mobile -->
+          <div class="flex gap-2 mb-4">
             <button
-              class="btn-primary"
-              on:click={handleRequestPairingCode}
-              disabled={$whatsappLoading}
+              class="flex-1 px-3 py-2 text-sm rounded-lg {mobileMethod === 'pairing' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}"
+              on:click={() => mobileMethod = 'pairing'}
             >
-              {$whatsappLoading ? 'Memproses...' : 'Dapatkan Kode Pairing'}
+              Kode Pairing
+            </button>
+            <button
+              class="flex-1 px-3 py-2 text-sm rounded-lg {mobileMethod === 'qr' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}"
+              on:click={() => mobileMethod = 'qr'}
+            >
+              QR Code
             </button>
           </div>
+
+          {#if mobileMethod === 'pairing'}
+            <p class="text-gray-600 mb-4">
+              Masukkan nomor telepon WhatsApp Anda untuk mendapatkan kode pairing 8 digit.
+            </p>
+            <div class="flex flex-col gap-3">
+              <input
+                type="tel"
+                bind:value={pairingPhoneNumber}
+                placeholder="Contoh: 081234567890"
+                class="input-field"
+              />
+              <button
+                class="btn-primary"
+                on:click={handleRequestPairingCode}
+                disabled={$whatsappLoading}
+              >
+                {$whatsappLoading ? 'Memproses...' : 'Dapatkan Kode Pairing'}
+              </button>
+            </div>
+          {:else}
+            <p class="text-gray-600 mb-4">
+              Klik tombol di bawah untuk mendapatkan QR code, lalu scan menggunakan HP lain atau buka link di komputer.
+            </p>
+            <button
+              class="btn-primary w-full"
+              on:click={handleMobileQRInitialize}
+              disabled={$whatsappLoading}
+            >
+              {$whatsappLoading ? 'Memproses...' : 'Dapatkan QR Code'}
+            </button>
+          {/if}
         {:else}
           <p class="text-gray-600 mb-4">
             WhatsApp belum terhubung. Klik tombol di bawah untuk memulai koneksi dan scan QR code.
@@ -170,32 +210,60 @@
           </button>
         {/if}
       </div>
-    {:else if $whatsappStatus.status === 'connecting' && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
+    {:else if ($whatsappStatus.status === 'connecting' || $whatsappStatus.status === 'qr_ready') && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
-        {#if isMobile && $whatsappStatus.pairingCode}
-          <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
-            <p class="text-blue-800 font-medium mb-3">
-              Hubungkan dengan Kode 8 Digit
-            </p>
+        {#if isMobile}
+          <!-- Mobile: Tampilkan sesuai metode yang dipilih -->
+          {#if $whatsappStatus.pairingCode && mobileMethod === 'pairing'}
+            <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
+              <p class="text-blue-800 font-medium mb-3">
+                Hubungkan dengan Kode 8 Digit
+              </p>
 
-            <div class="bg-white border-2 border-blue-300 rounded-lg p-4 mb-4 text-center">
-              <p class="text-sm text-gray-600 mb-2">Masukkan kode ini di WhatsApp:</p>
-              <p class="text-3xl font-mono font-bold tracking-widest text-blue-600">
-                {$whatsappStatus.pairingCode}
+              <div class="bg-white border-2 border-blue-300 rounded-lg p-4 mb-4 text-center">
+                <p class="text-sm text-gray-600 mb-2">Masukkan kode ini di WhatsApp:</p>
+                <p class="text-3xl font-mono font-bold tracking-widest text-blue-600">
+                  {$whatsappStatus.pairingCode}
+                </p>
+              </div>
+
+              <p class="text-blue-700 text-sm mb-2">
+                Cara menggunakan:
+              </p>
+              <ol class="list-decimal list-inside text-blue-700 text-sm space-y-1">
+                <li>Buka WhatsApp di HP Anda</li>
+                <li>Ketuk titik tiga → Perangkat tertaut → Tautkan perangkat</li>
+                <li>Pilih "Tautkan dengan nomor telepon"</li>
+                <li>Masukkan kode 8 digit di atas</li>
+              </ol>
+            </div>
+            <p class="text-sm text-gray-500 mt-4 text-center">
+              Kode pairing akan expired dalam beberapa menit
+            </p>
+          {:else if $whatsappStatus.qrCode && mobileMethod === 'qr'}
+            <p class="text-gray-600 mb-4">
+              Scan QR code di bawah menggunakan HP lain atau buka link di komputer:
+            </p>
+            <div class="flex justify-center">
+              <img
+                src={$whatsappStatus.qrCode}
+                alt="WhatsApp QR Code"
+                class="border rounded-lg max-w-full"
+                style="max-height: 250px;"
+              />
+            </div>
+            <p class="text-sm text-gray-500 mt-4 text-center">
+              QR code akan diperbarui otomatis setiap 2 menit
+            </p>
+          {:else}
+            <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+              <p class="text-yellow-700 text-sm">
+                {mobileMethod === 'pairing' ? 'Kode pairing belum tersedia.' : 'QR code belum tersedia.'} Silakan coba lagi.
               </p>
             </div>
-
-            <p class="text-blue-700 text-sm mb-2">
-              Cara menggunakan:
-            </p>
-            <ol class="list-decimal list-inside text-blue-700 text-sm space-y-1">
-              <li>Buka WhatsApp di HP Anda</li>
-              <li>Ketuk titik tiga → Perangkat tertaut → Tautkan perangkat</li>
-              <li>Pilih "Tautkan dengan nomor telepon"</li>
-              <li>Masukkan kode 8 digit di atas</li>
-            </ol>
-          </div>
+          {/if}
         {:else}
+          <!-- Desktop: Tampilkan QR code -->
           <p class="text-gray-600 mb-4">
             Scan QR code di bawah menggunakan WhatsApp di HP Anda:
           </p>
@@ -206,10 +274,10 @@
               class="border rounded-lg"
             />
           </div>
+          <p class="text-sm text-gray-500 mt-4 text-center">
+            QR code akan diperbarui otomatis setiap 2 menit
+          </p>
         {/if}
-        <p class="text-sm text-gray-500 mt-4 text-center">
-          QR code akan diperbarui otomatis setiap 2 menit
-        </p>
       </div>
     {:else if $whatsappStatus.status === 'connected'}
       <div class="bg-green-50 p-4 rounded-lg mb-4">
