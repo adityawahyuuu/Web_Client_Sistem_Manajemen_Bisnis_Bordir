@@ -6,7 +6,6 @@
     initializeWhatsApp,
     getWhatsAppStatus,
     logoutWhatsApp,
-    requestPairingCode,
     clearWhatsAppSession
   } from '../stores/whatsapp.js';
   import { success, error as showError } from '../stores/notifications.js';
@@ -66,11 +65,8 @@
       return;
     }
     try {
-      // 1. Initialize first
-      await initializeWhatsApp();
-
-      // 2. Then request pairing code
-      await requestPairingCode(pairingPhoneNumber.trim());
+      // Initialize with phoneNumber to get pairing code directly
+      await initializeWhatsApp(pairingPhoneNumber.trim());
       success('Kode pairing berhasil dibuat');
     } catch (error) {
       showError('Gagal membuat kode pairing: ' + error.message);
