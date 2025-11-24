@@ -213,8 +213,8 @@
     {:else if ($whatsappStatus.status === 'connecting' || $whatsappStatus.status === 'qr_ready') && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
         {#if isMobile}
-          <!-- Mobile: Tampilkan sesuai metode yang dipilih -->
-          {#if $whatsappStatus.pairingCode && mobileMethod === 'pairing'}
+          <!-- Mobile: Prioritaskan pairing code jika ada, lalu QR code -->
+          {#if $whatsappStatus.pairingCode}
             <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
               <p class="text-blue-800 font-medium mb-3">
                 Hubungkan dengan Kode 8 Digit
@@ -240,7 +240,7 @@
             <p class="text-sm text-gray-500 mt-4 text-center">
               Kode pairing akan expired dalam beberapa menit
             </p>
-          {:else if $whatsappStatus.qrCode && mobileMethod === 'qr'}
+          {:else if $whatsappStatus.qrCode}
             <p class="text-gray-600 mb-4">
               Scan QR code di bawah menggunakan HP lain atau buka link di komputer:
             </p>
@@ -258,7 +258,7 @@
           {:else}
             <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
               <p class="text-yellow-700 text-sm">
-                {mobileMethod === 'pairing' ? 'Kode pairing belum tersedia.' : 'QR code belum tersedia.'} Silakan coba lagi.
+                Data belum tersedia. Silakan coba lagi.
               </p>
             </div>
           {/if}
