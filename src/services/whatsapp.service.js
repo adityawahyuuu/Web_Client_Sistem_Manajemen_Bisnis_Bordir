@@ -6,7 +6,8 @@ export const whatsappService = {
   async initialize(phoneNumber = null) {
     const body = phoneNumber ? { phoneNumber } : {};
     const response = await api.post('/whatsapp/initialize', body);
-    return response.data || response;
+    console.log('WhatsApp initialize API response:', response);
+    return response;
   },
 
   // Get connection status

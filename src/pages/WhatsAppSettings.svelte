@@ -103,8 +103,14 @@
   function getStatusColor(status) {
     switch (status) {
       case 'connected': return 'text-green-600';
-      case 'connecting': return 'text-yellow-600';
-      default: return 'text-red-600';
+      case 'connecting':
+      case 'qr_ready':
+      case 'pairing_code_ready':
+        return 'text-yellow-600';
+      case 'error':
+      case 'timeout':
+        return 'text-red-600';
+      default: return 'text-gray-600';
     }
   }
 
@@ -112,6 +118,10 @@
     switch (status) {
       case 'connected': return 'Terhubung';
       case 'connecting': return 'Menghubungkan...';
+      case 'qr_ready': return 'QR Code Siap';
+      case 'pairing_code_ready': return 'Kode Pairing Siap';
+      case 'error': return 'Error';
+      case 'timeout': return 'Timeout';
       default: return 'Tidak Terhubung';
     }
   }
@@ -210,7 +220,7 @@
           </button>
         {/if}
       </div>
-    {:else if ($whatsappStatus.status === 'connecting' || $whatsappStatus.status === 'qr_ready') && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
+    {:else if ($whatsappStatus.status === 'connecting' || $whatsappStatus.status === 'qr_ready' || $whatsappStatus.status === 'pairing_code_ready') && ($whatsappStatus.qrCode || $whatsappStatus.pairingCode)}
       <div class="bg-gray-50 p-4 rounded-lg mb-4">
         {#if isMobile}
           <!-- Mobile: Prioritaskan pairing code jika ada, lalu QR code -->
@@ -290,6 +300,38 @@
           disabled={$whatsappLoading}
         >
           {$whatsappLoading ? 'Logout...' : 'Logout WhatsApp'}
+        </button>
+      </div>
+    {:else if $whatsappStatus.status === 'error'}
+      <div class="bg-red-50 p-4 rounded-lg mb-4">
+        <p class="text-red-800 font-medium mb-2">
+          Terjadi Kesalahan
+        </p>
+        <p class="text-red-700 text-sm mb-4">
+          {$whatsappStatus.error || 'Gagal menginisialisasi WhatsApp. Silakan coba lagi.'}
+        </p>
+        <button
+          class="btn-primary"
+          on:click={handleInitialize}
+          disabled={$whatsappLoading}
+        >
+          {$whatsappLoading ? 'Memproses...' : 'Coba Lagi'}
+        </button>
+      </div>
+    {:else if $whatsappStatus.status === 'timeout'}
+      <div class="bg-yellow-50 p-4 rounded-lg mb-4">
+        <p class="text-yellow-800 font-medium mb-2">
+          Koneksi Timeout
+        </p>
+        <p class="text-yellow-700 text-sm mb-4">
+          {$whatsappStatus.error || 'Koneksi timeout. Silakan coba lagi.'}
+        </p>
+        <button
+          class="btn-primary"
+          on:click={handleInitialize}
+          disabled={$whatsappLoading}
+        >
+          {$whatsappLoading ? 'Memproses...' : 'Coba Lagi'}
         </button>
       </div>
     {/if}
