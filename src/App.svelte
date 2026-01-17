@@ -1,19 +1,33 @@
 <script>
-  import { Router, Route, navigate } from 'svelte-routing';
+  import { Router, navigate } from 'svelte-routing';
   import { isAuthenticated } from './stores/auth.js';
   import Sidebar from './components/Sidebar.svelte';
   import Notification from './components/Notification.svelte';
-  import Login from './pages/Login.svelte';
-  import Dashboard from './pages/Dashboard.svelte';
-  import Customers from './pages/Customers.svelte';
-  import Invoices from './pages/Invoices.svelte';
-  import Waybills from './pages/Waybills.svelte';
-  import Receipts from './pages/Receipts.svelte';
-  import WhatsAppSettings from './pages/WhatsAppSettings.svelte';
+  import LazyRoute from './components/LazyRoute.svelte';
+
+  // Lazy load pages - Authentication
+  const Login = () => import('./pages/Login.svelte');
+  const Register = () => import('./pages/Register.svelte');
+  const VerifyEmail = () => import('./pages/VerifyEmail.svelte');
+  const ForgotPassword = () => import('./pages/ForgotPassword.svelte');
+  const ResetPassword = () => import('./pages/ResetPassword.svelte');
+
+  // Lazy load pages - Main App
+  const Dashboard = () => import('./pages/Dashboard.svelte');
+  const Customers = () => import('./pages/Customers.svelte');
+  const Invoices = () => import('./pages/Invoices.svelte');
+  const Waybills = () => import('./pages/Waybills.svelte');
+  const Receipts = () => import('./pages/Receipts.svelte');
+  const WhatsAppSettings = () => import('./pages/WhatsAppSettings.svelte');
+
+  // Public routes that don't require authentication
+  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
 
   $: if (!$isAuthenticated && typeof window !== 'undefined') {
     const path = window.location.pathname;
-    if (path !== '/login') {
+    const isPublicRoute = publicRoutes.some(route => path.startsWith(route));
+
+    if (!isPublicRoute) {
       navigate('/login', { replace: true });
     }
   }
@@ -23,21 +37,25 @@
 
 <Router>
   {#if $isAuthenticated}
+    <!-- Authenticated routes -->
     <div class="flex min-h-screen bg-gray-100">
       <Sidebar />
       <main class="flex-1 p-8">
-        <Route path="/" component={Dashboard} />
-        <Route path="/customers" component={Customers} />
-        <Route path="/invoices" component={Invoices} />
-        <Route path="/waybills" component={Waybills} />
-        <Route path="/receipts" component={Receipts} />
-        <Route path="/whatsapp" component={WhatsAppSettings} />
+        <LazyRoute path="/" component={Dashboard} />
+        <LazyRoute path="/customers" component={Customers} />
+        <LazyRoute path="/invoices" component={Invoices} />
+        <LazyRoute path="/waybills" component={Waybills} />
+        <LazyRoute path="/receipts" component={Receipts} />
+        <LazyRoute path="/whatsapp" component={WhatsAppSettings} />
       </main>
     </div>
   {:else}
-    <Route path="/login" component={Login} />
-    <Route path="*">
-      <Login />
-    </Route>
+    <!-- Public routes -->
+    <LazyRoute path="/login" component={Login} />
+    <LazyRoute path="/register" component={Register} />
+    <LazyRoute path="/verify-email" component={VerifyEmail} />
+    <LazyRoute path="/forgot-password" component={ForgotPassword} />
+    <LazyRoute path="/reset-password" component={ResetPassword} />
+    <LazyRoute path="*" component={Login} />
   {/if}
 </Router>

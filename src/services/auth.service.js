@@ -4,24 +4,33 @@ export const authService = {
   // Login with API
   async login(email, password) {
     try {
+      // Call /api/v1/auth/login endpoint
+      // Backend should set httpOnly cookie for refresh token
       const response = await api.post('/auth/login', { email, password });
 
-      if (response.type === 'success' && response.data) {
-        const { token, refreshToken, user } = response.data;
+      // Check response type
+      if (response.type === 'success' && response.auth) {
+        const { accessToken, expiresIn, refreshToken } = response.auth;
 
-        // Store tokens
-        api.setTokens(token, refreshToken);
+        // Store tokens securely in memory (not localStorage!)
+        // Both access and refresh tokens stored in memory
+        api.setTokens(accessToken, expiresIn, refreshToken);
+
+        // Extract user data from response
+        const userData = response.data || {};
 
         return {
           user: {
-            id: user.id,
-            email: user.email,
-            fullName: user.full_name || '',
-            role: user.role || 'user'
-          }
+            id: userData.id,
+            email: userData.email,
+            fullName: userData.full_name || userData.fullName || '',
+            role: userData.role || 'user'
+          },
+          expiresIn
         };
       }
 
+      // Handle error/fail responses
       throw new Error(response.message || 'Login failed');
     } catch (error) {
       // Fallback to mock for development
@@ -34,6 +43,13 @@ export const authService = {
 
   // Logout
   async logout() {
+    try {
+      // Call backend logout to clear httpOnly refresh token cookie
+      await api.post('/auth/logout', {});
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+    // Clear access token from memory
     api.clearTokens();
   },
 
@@ -54,26 +70,96 @@ export const authService = {
     return response.data || response;
   },
 
-  // Refresh token
-  async refreshToken() {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
+  // Register new user
+  async register(email, password, repeatPassword, name) {
+    const response = await api.post('/auth/register', {
+      email,
+      password,
+      repeat_password: repeatPassword,
+      name
+    });
+
+    if (response.type === 'success') {
+      return response;
+    }
+
+    throw new Error(response.message || 'Registration failed');
+  },
+
+  // Verify email with OTP
+  async verifyEmail(email, otpCode) {
+    const response = await api.post('/auth/verify-email', {
+      email,
+      otp_code: otpCode
+    });
+
+    if (response.type === 'success') {
+      return response;
+    }
+
+    throw new Error(response.message || 'Email verification failed');
+  },
+
+  // Resend OTP code
+  async resendOtp(email) {
+    const response = await api.post('/auth/resend-otp', { email });
+
+    if (response.type === 'success') {
+      return response;
+    }
+
+    throw new Error(response.message || 'Failed to resend OTP');
+  },
+
+  // Request password reset
+  async forgotPassword(email) {
+    const response = await api.post('/auth/forgot-password', { email });
+
+    if (response.type === 'success') {
+      return response;
+    }
+
+    throw new Error(response.message || 'Failed to send reset link');
+  },
+
+  // Reset password with token
+  async resetPassword(token, password, repeatPassword) {
+    const response = await api.post('/auth/reset-password', {
+      token,
+      password,
+      repeat_password: repeatPassword
+    });
+
+    if (response.type === 'success') {
+      return response;
+    }
+
+    throw new Error(response.message || 'Password reset failed');
+  },
+
+  // Refresh access token using refresh token
+  async refreshToken(refreshToken) {
+    // Use stored refresh token if not provided
+    const tokenToUse = refreshToken || api.getRefreshToken();
+
+    if (!tokenToUse) {
       throw new Error('No refresh token available');
     }
 
-    const response = await api.post('/auth/refresh-token', { refreshToken });
+    const response = await api.post('/auth/refresh-token', { refreshToken: tokenToUse });
 
-    if (response.type === 'success' && response.data) {
-      api.setTokens(response.data.accessToken, response.data.refreshToken);
-      return response.data;
+    if (response.type === 'success' && response.auth) {
+      const { accessToken, expiresIn, refreshToken: newRefreshToken } = response.auth;
+      api.setTokens(accessToken, expiresIn, newRefreshToken);
+      return response;
     }
 
-    throw new Error('Token refresh failed');
+    throw new Error(response.message || 'Token refresh failed');
   },
 
-  // Check if logged in
+  // Check if logged in (using secure memory-based token)
   isLoggedIn() {
-    return !!api.getAuthToken();
+    return api.isAuthenticated();
   },
 
   // Get all users (admin only)
@@ -104,10 +190,12 @@ export const authService = {
 
     const { password: _, ...userData } = user;
 
-    // Set mock token
-    api.setTokens('mock-token-' + userData.id, 'mock-refresh-' + userData.id);
+    // Set mock tokens with expiry (1 hour)
+    const mockExpiresIn = 3600; // 1 hour in seconds
+    const mockRefreshToken = 'mock-refresh-' + userData.id;
+    api.setTokens('mock-token-' + userData.id, mockExpiresIn, mockRefreshToken);
 
-    return { user: userData };
+    return { user: userData, expiresIn: mockExpiresIn };
   }
 };
 

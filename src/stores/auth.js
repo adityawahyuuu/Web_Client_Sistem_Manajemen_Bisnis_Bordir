@@ -1,23 +1,15 @@
 import { writable } from 'svelte/store';
 import authService from '../services/auth.service.js';
 
-const storedUser = typeof localStorage !== 'undefined'
-  ? JSON.parse(localStorage.getItem('user') || 'null')
-  : null;
+/**
+ * SECURITY: User data stored in memory only (Svelte store)
+ * No sensitive data in localStorage to prevent XSS attacks
+ * Tokens stored securely in memory via tokenStorage service
+ */
 
-export const user = writable(storedUser);
-export const isAuthenticated = writable(!!storedUser && authService.isLoggedIn());
+export const user = writable(null);
+export const isAuthenticated = writable(authService.isLoggedIn());
 export const loading = writable(false);
-
-user.subscribe(value => {
-  if (typeof localStorage !== 'undefined') {
-    if (value) {
-      localStorage.setItem('user', JSON.stringify(value));
-    } else {
-      localStorage.removeItem('user');
-    }
-  }
-});
 
 export async function login(email, password) {
   loading.set(true);
