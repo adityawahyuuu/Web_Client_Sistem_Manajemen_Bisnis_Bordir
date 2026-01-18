@@ -4,10 +4,8 @@
   import { invoices, loadInvoices } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
-  import { sendWaybillToMultiple } from '../stores/whatsapp.js';
   import waybillService from '../services/waybill.service.js';
   import Modal from '../components/Modal.svelte';
-  import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
 
   let downloadingId = null;
 
@@ -146,28 +144,6 @@
       return customer.whatsapp_numbers;
     }
     return [];
-  }
-
-  async function handleWhatsAppSend(event) {
-    const { phoneNumbers, message } = event.detail;
-    try {
-      const results = await sendWaybillToMultiple(selectedWaybill.id, phoneNumbers, message);
-
-      if (results.success.length > 0) {
-        updateWaybill(selectedWaybill.id, { status: 'sent' });
-      }
-
-      if (results.failed.length === 0) {
-        success(`Surat jalan berhasil dikirim ke ${results.success.length} nomor via WhatsApp`);
-      } else if (results.success.length > 0) {
-        info(`Berhasil: ${results.success.length} nomor, Gagal: ${results.failed.length} nomor`);
-      } else {
-        showError(`Gagal mengirim ke semua nomor`);
-      }
-    } catch (error) {
-      showError('Gagal mengirim surat jalan: ' + error.message);
-    }
-    showWhatsAppModal = false;
   }
 
   function getStatusBadge(status) {
@@ -390,13 +366,3 @@
     </div>
   </form>
 </Modal>
-
-{#if selectedWaybill}
-  <WhatsAppSendModal
-    bind:show={showWhatsAppModal}
-    documentType="waybill"
-    documentNumber={selectedWaybill.waybill_number}
-    customerPhones={getCustomerPhones(selectedWaybill.customer_id)}
-    on:send={handleWhatsAppSend}
-  />
-{/if}

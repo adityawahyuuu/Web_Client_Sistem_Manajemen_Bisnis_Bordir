@@ -18,7 +18,6 @@
   const Invoices = () => import('./pages/Invoices.svelte');
   const Waybills = () => import('./pages/Waybills.svelte');
   const Receipts = () => import('./pages/Receipts.svelte');
-  const WhatsAppSettings = () => import('./pages/WhatsAppSettings.svelte');
 
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
@@ -46,7 +45,6 @@
         <LazyRoute path="/invoices" component={Invoices} />
         <LazyRoute path="/waybills" component={Waybills} />
         <LazyRoute path="/receipts" component={Receipts} />
-        <LazyRoute path="/whatsapp" component={WhatsAppSettings} />
       </main>
     </div>
   {:else}

@@ -4,10 +4,8 @@
   import { invoices, loadInvoices } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
   import { success, error as showError, info } from '../stores/notifications.js';
-  import { sendReceiptToMultiple } from '../stores/whatsapp.js';
   import receiptService from '../services/receipt.service.js';
   import Modal from '../components/Modal.svelte';
-  import WhatsAppSendModal from '../components/WhatsAppSendModal.svelte';
 
   let downloadingId = null;
 
@@ -119,24 +117,6 @@
       return customer.whatsapp_numbers;
     }
     return [];
-  }
-
-  async function handleWhatsAppSend(event) {
-    const { phoneNumbers, message } = event.detail;
-    try {
-      const results = await sendReceiptToMultiple(selectedReceipt.id, phoneNumbers, message);
-
-      if (results.failed.length === 0) {
-        success(`Kwitansi berhasil dikirim ke ${results.success.length} nomor via WhatsApp`);
-      } else if (results.success.length > 0) {
-        info(`Berhasil: ${results.success.length} nomor, Gagal: ${results.failed.length} nomor`);
-      } else {
-        showError(`Gagal mengirim ke semua nomor`);
-      }
-    } catch (error) {
-      showError('Gagal mengirim kwitansi: ' + error.message);
-    }
-    showWhatsAppModal = false;
   }
 
   function getPaymentMethodLabel(method) {
@@ -325,13 +305,3 @@
     </div>
   </form>
 </Modal>
-
-{#if selectedReceipt}
-  <WhatsAppSendModal
-    bind:show={showWhatsAppModal}
-    documentType="receipt"
-    documentNumber={selectedReceipt.receipt_number}
-    customerPhones={getCustomerPhones(selectedReceipt.customer_id)}
-    on:send={handleWhatsAppSend}
-  />
-{/if}
