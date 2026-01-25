@@ -64,12 +64,6 @@ export const authService = {
     }
   },
 
-  // Create profile
-  async createProfile(fullName) {
-    const response = await api.post('/auth/profile', { full_name: fullName });
-    return response.data || response;
-  },
-
   // Register new user
   async register(email, password, repeatPassword, name) {
     const response = await api.post('/auth/register', {

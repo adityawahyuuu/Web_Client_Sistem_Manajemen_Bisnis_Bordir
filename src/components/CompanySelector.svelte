@@ -6,15 +6,22 @@
     selectedCompany,
     companiesLoading,
     loadCompanies,
-    selectCompany
+    selectCompany,
+    loadCompanyLogo,
+    loadCompaniesWithLogo
   } from '../stores/company.js';
+
 
   let isOpen = false;
   let dropdownRef;
 
+  $: if ($selectedCompany?.id && !$selectedCompany.logoUrl) {
+    loadCompanyLogo($selectedCompany.id);
+  }
+  
   onMount(() => {
-    loadCompanies();
-
+    loadCompaniesWithLogo();
+    
     // Close dropdown when clicking outside
     function handleClickOutside(event) {
       if (dropdownRef && !dropdownRef.contains(event.target)) {
@@ -57,9 +64,9 @@
       <span class="text-sm text-gray-400">Loading...</span>
     {:else if $selectedCompany}
       <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-        {#if $selectedCompany.logo}
+        {#if $selectedCompany?.logoUrl}
           <img
-            src={$selectedCompany.logo}
+            src={$selectedCompany.logoUrl}
             alt={$selectedCompany.name}
             class="w-full h-full rounded-full object-cover"
           />
@@ -107,8 +114,8 @@
               on:click={() => handleSelect(company)}
             >
               <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                {#if company.logo}
-                  <img src={company.logo} alt={company.name} class="w-full h-full rounded-full object-cover" />
+                {#if company.logoUrl}
+                  <img src={company.logoUrl} />
                 {:else}
                   <span class="text-sm font-semibold text-blue-600">{getInitials(company.name)}</span>
                 {/if}

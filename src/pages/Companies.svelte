@@ -6,14 +6,16 @@
     companies,
     selectedCompany,
     companiesLoading,
-    loadCompanies,
     createCompany,
     updateCompany,
     deleteCompany,
-    selectCompany
+    selectCompany,
+    loadCompaniesWithLogo,
+    updateCompanyLogo
   } from '../stores/company.js';
   import { success, error as errorNotify } from '../stores/notifications.js';
-
+  import companyService from '../services/company.service.js';
+  
   let showModal = false;
   let editingCompany = null;
   let form = {
@@ -25,8 +27,12 @@
     tax_id: ''
   };
 
+  let logoFile = null;
+  let logoPreview = null;
+  let uploadingLogo = false;
+
   onMount(() => {
-    loadCompanies();
+    loadCompaniesWithLogo();
   });
 
   function openCreateModal() {
@@ -62,15 +68,46 @@
     }
 
     try {
+      let company;
+
       if (editingCompany) {
-        await updateCompany(editingCompany.id, form);
+        company = await updateCompany(editingCompany.id, form);
       } else {
-        await createCompany(form);
+        company = await createCompany(form);
       }
+
+      // ===== UPLOAD LOGO SETELAH COMPANY ADA =====
+      if (logoFile && company?.id) {
+        uploadingLogo = true;
+
+        await companyService.uploadLogo(company.id, logoFile);
+
+        // refresh logo url
+        const logoUrl = await companyService.getLogo(company.id);
+        updateCompanyLogo(company.id, logoUrl);
+      }
+
       showModal = false;
+      logoFile = null;
+      logoPreview = null;
     } catch (err) {
       console.error('Submit error:', err);
+    } finally {
+      uploadingLogo = false;
     }
+  }
+
+  function handleLogoChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      errorNotify('File harus berupa gambar');
+      return;
+    }
+
+    logoFile = file;
+    logoPreview = URL.createObjectURL(file);
   }
 
   async function handleDelete(company) {
@@ -85,9 +122,20 @@
     }
   }
 
-  function handleSelect(company) {
-    selectCompany(company);
-    success(`${company.name} dipilih sebagai perusahaan aktif`);
+  async function handleSelect(company) {
+    try {
+      // jika logo belum pernah di-load
+      if (!company.logoUrl) {
+        const logoUrl = await companyService.getLogo(company.id);
+        updateCompanyLogo(company.id, logoUrl);
+      }
+
+      selectCompany(company);
+      success(`${company.name} dipilih sebagai perusahaan aktif`);
+    } catch (err) {
+      console.error('Failed to load logo:', err);
+      selectCompany(company); // tetap pilih walau logo gagal
+    }
   }
 
   function getInitials(name) {
@@ -144,10 +192,16 @@
 
           <div class="flex items-start gap-4 mb-4">
             <div class="w-14 h-14 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              {#if company.logo}
-                <img src={company.logo} alt={company.name} class="w-full h-full rounded-lg object-cover" />
+              {#if company.logoUrl}
+                <img
+                  src={company.logoUrl}
+                  alt={company.name}
+                  class="w-full h-full rounded-lg object-cover"
+                />
               {:else}
-                <span class="text-lg font-bold text-blue-600">{getInitials(company.name)}</span>
+                <span class="text-lg font-bold text-blue-600">
+                  {getInitials(company.name)}
+                </span>
               {/if}
             </div>
             <div class="flex-1 min-w-0">
@@ -303,6 +357,30 @@
       </div>
     </div>
 
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        Logo Perusahaan
+      </label>
+
+      <div class="flex items-center gap-4">
+        <div class="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+          {#if logoPreview}
+            <img src={logoPreview} class="w-full h-full object-cover" />
+          {:else if editingCompany?.logoUrl}
+            <img src={editingCompany.logoUrl} class="w-full h-full object-cover" />
+          {:else}
+            <span class="text-gray-400 text-sm">No logo</span>
+          {/if}
+        </div>
+
+        <input
+          type="file"
+          accept="image/*"
+          on:change={handleLogoChange}
+        />
+      </div>
+    </div>
+
     <div class="flex justify-end gap-3 pt-4">
       <button
         type="button"
@@ -311,8 +389,10 @@
       >
         Batal
       </button>
-      <button type="submit" class="btn-primary">
-        {editingCompany ? 'Simpan Perubahan' : 'Buat Perusahaan'}
+      <button type="submit" class="btn-primary" disabled={uploadingLogo}>
+        {uploadingLogo
+          ? 'Mengunggah logo...'
+          : editingCompany ? 'Simpan Perubahan' : 'Buat Perusahaan'}
       </button>
     </div>
   </form>

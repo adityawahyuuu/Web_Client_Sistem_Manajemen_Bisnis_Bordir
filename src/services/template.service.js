@@ -1,5 +1,7 @@
 import api from './api.js';
+import { get } from 'svelte/store';
 import { error as errorNotify } from '../stores/notifications.js';
+import { currentTemplate } from '../stores/templateEditor.js';
 
 const templateService = {
   // =============================================================================
@@ -9,12 +11,10 @@ const templateService = {
   /**
    * Get available preset templates
    * GET /templates/presets?document_type=invoice|receipt|waybill
-   * @param {string} documentType - e.g., 'invoice', 'waybill', 'receipt' (optional)
    */
-  async getPresets(documentType = null) {
+  async getPresets() {
     try {
-      const query = documentType ? `?document_type=${documentType}` : '';
-      const response = await api.get(`/templates/presets${query}`);
+      const response = await api.get(`/templates/presets`);
       return response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memuat preset template');
@@ -43,22 +43,13 @@ const templateService = {
   // =============================================================================
 
   /**
-   * Get company templates
-   * GET /templates/:companyId?page=1&limit=10&document_type=invoice&status=draft|published&search=keyword
+   * Get company default templates
+   * GET /templates/presets/:companyId/defaults
    * @param {number} companyId
-   * @param {object} params - { page, limit, document_type, status, search }
    */
-  async getCompanyTemplates(companyId, params = {}) {
+  async getCompanyTemplates(companyId) {
     try {
-      const queryParams = new URLSearchParams();
-      if (params.page) queryParams.append('page', params.page);
-      if (params.limit) queryParams.append('limit', params.limit);
-      if (params.document_type) queryParams.append('document_type', params.document_type);
-      if (params.status) queryParams.append('status', params.status);
-      if (params.search) queryParams.append('search', params.search);
-
-      const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-      const response = await api.get(`/templates/${companyId}${query}`);
+      const response = await api.get(`/templates/presets/${companyId}/defaults`);
       return response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memuat template perusahaan');
@@ -158,12 +149,13 @@ const templateService = {
   /**
    * Validate template before publish
    * POST /templates/:companyId/:id/validate
-   * @param {number} companyId
-   * @param {number} templateId
    */
-  async validate(companyId, templateId) {
+  async validate() {
     try {
-      const response = await api.post(`/templates/${companyId}/${templateId}/validate`, {});
+      const template = get(currentTemplate);
+      if (!template) return null;
+
+      const response = await api.post(`/templates/${template.company_id}/${template.id}/validate`, {});
       return response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memvalidasi template');

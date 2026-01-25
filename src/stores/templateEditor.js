@@ -196,12 +196,11 @@ export function clearSelection() {
 
 /**
  * Load preset templates
- * @param {string} documentType
  */
-export async function loadPresets(documentType = 'invoice') {
+export async function loadPresets(d) {
   isLoading.set(true);
   try {
-    const result = await templateService.getPresets(documentType);
+    const result = await templateService.getPresets();
     presets.set(result.data || result || []);
   } catch (err) {
     errorNotify('Gagal memuat preset template');
@@ -214,7 +213,6 @@ export async function loadPresets(documentType = 'invoice') {
 /**
  * Load company templates
  * @param {number} companyId
- * @param {object} params - { page, limit, document_type, status, search }
  */
 export async function loadCompanyTemplates(companyId = null, params = {}) {
   const cid = companyId || get(currentCompanyId);
@@ -225,7 +223,7 @@ export async function loadCompanyTemplates(companyId = null, params = {}) {
 
   isLoading.set(true);
   try {
-    const result = await templateService.getCompanyTemplates(cid, params);
+    const result = await templateService.getCompanyTemplates(cid);
     companyTemplates.set(result.data || result || []);
     return result;
   } catch (err) {
@@ -360,12 +358,9 @@ export async function saveNow() {
 // =============================================================================
 
 export async function validateTemplate() {
-  const template = get(currentTemplate);
-  if (!template) return null;
-
   isLoading.set(true);
   try {
-    const result = await templateService.validate(template.company_id, template.id);
+    const result = await templateService.validate();
     // Backend returns { type, message, data: { valid, errors, warnings } }
     const validation = result?.data || result;
     validationResult.set(validation);

@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import companyService from '../services/company.service.js';
 import { success, error as errorNotify } from './notifications.js';
+import { api } from '../services/api.js';
 
 // =============================================================================
 // STORES
@@ -214,4 +215,54 @@ export function clearCompanyState() {
   companies.set([]);
   selectedCompany.set(null);
   localStorage.removeItem(SELECTED_COMPANY_KEY);
+}
+
+export async function loadCompanyLogo(companyId) {
+  try {
+    const logoUrl = await companyService.getLogo(companyId);
+
+    selectedCompany.update(c =>
+      c ? { ...c, logoUrl } : c
+    );
+
+    return logoUrl;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadCompaniesWithLogo() {
+  companiesLoading.set(true);
+
+  const list = await loadCompanies(); // ambil list TANPA logo
+
+  const enriched = await Promise.all(
+    list.map(async (company) => {
+      try {
+        const logoUrl = await companyService.getLogo(company.id);
+        return { ...company, logoUrl };
+      } catch {
+        return { ...company, logoUrl: null };
+      }
+    })
+  );
+
+  companies.set(enriched);
+  companiesLoading.set(false);
+}
+
+export function updateCompanyLogo(companyId, logoUrl) {
+  companies.update(list =>
+    list.map(c =>
+      c.id === companyId
+        ? { ...c, logoUrl }
+        : c
+    )
+  );
+
+  selectedCompany.update(c =>
+    c?.id === companyId
+      ? { ...c, logoUrl }
+      : c
+  );
 }

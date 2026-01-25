@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { link } from 'svelte-routing';
   import TemplateEditor from '../components/template-editor/TemplateEditor.svelte';
   import { selectedCompany, currentCompanyId, hasCompanies, loadCompanies } from '../stores/company.js';
@@ -27,10 +27,10 @@
     if (templateId && $currentCompanyId) {
       await loadTemplate($currentCompanyId, templateId);
     }
+  });
 
-    return () => {
-      resetEditor();
-    };
+  onDestroy(() => {
+    resetEditor();
   });
 </script>
 
@@ -76,7 +76,6 @@
   <div class="template-editor-page -m-8">
     <TemplateEditor
       companyId={$currentCompanyId}
-      {documentType}
       {templateId}
     />
   </div>

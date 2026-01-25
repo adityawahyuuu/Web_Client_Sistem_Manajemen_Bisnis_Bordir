@@ -103,6 +103,34 @@ const companyService = {
       errorNotify(err.message || 'Gagal upload logo');
       throw err;
     }
+  },
+
+  /**
+   * Get company logo (binary)
+   * @param {number} id
+   */
+  async getLogo(id) {
+    try {
+      const token = api.getAuthToken();
+      const url = `${api.baseUrl}/companies/${id}/logo`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load company logo');
+      }
+
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (err) {
+      errorNotify(err.message || 'Gagal memuat logo perusahaan');
+      throw err;
+    }
   }
 };
 

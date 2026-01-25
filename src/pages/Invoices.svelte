@@ -320,7 +320,7 @@
           <tbody class="bg-white divide-y divide-gray-200">
             {#if filteredInvoices.length === 0}
               <tr>
-                <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                <td colspan={$hasInvoiceTemplate ? 7 : 6} class="px-6 py-8 text-center text-gray-500">
                   {searchTerm ? 'Tidak ada invoice yang cocok dengan pencarian' : 'Belum ada data invoice'}
                 </td>
               </tr>
