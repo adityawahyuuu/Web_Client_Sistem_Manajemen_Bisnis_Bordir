@@ -40,8 +40,11 @@ export async function updateCustomer(id, data) {
 }
 
 export async function deleteCustomer(id) {
-  await customerService.delete(id);
-  customers.update(list => list.filter(c => c.id !== id));
+  const result = await customerService.delete(id);
+  if (result) {
+    customers.update(list => list.filter(c => c.id !== id));
+  }
+  return result;
 }
 
 export function getCustomerById(id) {

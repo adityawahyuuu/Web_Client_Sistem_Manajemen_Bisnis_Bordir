@@ -1,20 +1,37 @@
 <script>
   import { onMount } from 'svelte';
-  import { invoices, loadInvoices, addInvoice, updateInvoice, deleteInvoice } from '../stores/invoices.js';
+  import { invoices, loadInvoices, addInvoice, updateInvoice, deleteInvoice, invoiceTemplates, hasInvoiceTemplate, loadInvoiceTemplates } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
-  import { success, error as showError, info } from '../stores/notifications.js';
+  import { success, error as showError } from '../stores/notifications.js';
+  import { items, loadItems } from '../stores/items.js';
+  import { selectedCompany } from '../stores/company.js';
   import invoiceService from '../services/invoice.service.js';
   import Modal from '../components/Modal.svelte';
 
   let downloadingId = null;
 
+  const num = (v) => {
+    const n = Number(v);
+    return isNaN(n) ? 0 : n;
+  };
+
   onMount(() => {
-    loadInvoices();
-    loadCustomers();
+    if ($selectedCompany?.id) {
+      loadInvoices();
+      loadCustomers();
+      loadItems();
+      loadInvoiceTemplates();
+    }
   });
 
+  $: if ($selectedCompany?.id) {
+    loadInvoices();
+    loadCustomers();
+    loadItems();
+    loadInvoiceTemplates();
+  }
+
   let showModal = false;
-  let showWhatsAppModal = false;
   let editingInvoice = null;
   let selectedInvoice = null;
   let searchTerm = '';
@@ -23,7 +40,8 @@
     customer_id: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: '',
-    items: [{ item_name: '', description: '', quantity: 1, unit_price: 0 }],
+    id: '',
+    items: [{ id: null, item_id: null, item_name: '', description: '', quantity: 1, unit_price: 0, unit: 'pcs' }],
     tax_amount: 0,
     discount_amount: 0,
     notes: '',
@@ -34,8 +52,8 @@
     (i.invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  $: subtotal = form.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-  $: totalAmount = subtotal + form.tax_amount - form.discount_amount;
+  $: subtotal = form.items.reduce((sum, i) => sum + num(i.quantity) * num(i.unit_price), 0);
+  $: totalAmount = subtotal + num(form.tax_amount) - num(form.discount_amount);
 
   function formatCurrency(amount) {
     return new Intl.NumberFormat('id-ID', {
@@ -45,44 +63,64 @@
     }).format(amount);
   }
 
+  const calculateInvoiceTotal = (invoice) => {
+    const total = num(invoice.total_amount);
+    if (total > 0) return total;
+
+    const invoiceItems = invoice.items || [];
+    const sub = invoiceItems.reduce(
+      (sum, item) => sum + num(item.quantity) * num(item.unit_price),
+      0
+    );
+
+    return sub + num(invoice.tax_amount) - num(invoice.discount_amount);
+  };
+
   function getCustomerName(customerId) {
     const customer = $customers.find(c => c.id === customerId);
     return customer ? customer.name : '-';
   }
 
   function openModal(invoice = null) {
+    console.log('Opening modal with invoice:', invoice);
+    console.log('Available items:', $items);
+
     editingInvoice = invoice;
     if (invoice) {
       form = {
         customer_id: invoice.customer_id,
         invoice_date: invoice.invoice_date,
         due_date: invoice.due_date || '',
+        id: invoice.id,
         items: (invoice.items || []).map(i => ({
+          id: i.id ?? null,
+          item_id: i.item_id ?? null,
           item_name: i.item_name || '',
           description: i.description || '',
-          quantity: i.quantity || 1,
-          unit_price: i.unit_price || 0
+          quantity: num(i.quantity) || 1,
+          unit_price: num(i.unit_price) || 0,
+          unit: i.unit || 'pcs'
         })),
-        tax_amount: invoice.tax_amount || 0,
-        discount_amount: invoice.discount_amount || 0,
+        tax_amount: num(invoice.tax_amount),
+        discount_amount: num(invoice.discount_amount),
         notes: invoice.notes || '',
         status: invoice.status || 'draft'
       };
-      if (form.items.length === 0) {
-        form.items = [{ item_name: '', description: '', quantity: 1, unit_price: 0 }];
-      }
     } else {
       form = {
         customer_id: '',
         invoice_date: new Date().toISOString().split('T')[0],
         due_date: '',
-        items: [{ item_name: '', description: '', quantity: 1, unit_price: 0 }],
+        id: '',
+        items: [{ id: null, item_id: null, item_name: '', description: '', quantity: 1, unit_price: 0, unit: 'pcs' }],  // ✅ FIX
         tax_amount: 0,
         discount_amount: 0,
         notes: '',
         status: 'draft'
       };
     }
+
+    console.log('Available form items data:', form.items);
     showModal = true;
   }
 
@@ -92,31 +130,60 @@
   }
 
   function addItem() {
-    form.items = [...form.items, { item_name: '', description: '', quantity: 1, unit_price: 0 }];
+    form.items = [
+      ...form.items,
+      {
+        id: null,
+        item_id: null,
+        item_name: '',
+        description: '',
+        quantity: 1,
+        unit_price: 0,
+        unit: 'pcs'
+      }
+    ];
   }
 
   function removeItem(index) {
-    if (form.items.length > 1) {
-      form.items = form.items.filter((_, i) => i !== index);
-    }
+    if (form.items.length === 1) return;
+    form.items = form.items.filter((_, i) => i !== index);
   }
 
   function handleSubmit() {
+    if (!$selectedCompany?.id) return;
+
     if (!form.customer_id) {
       showError('Pelanggan harus dipilih');
       return;
     }
 
     const invoiceData = {
-      ...form,
-      items: form.items.map((item, index) => ({
-        id: String(index + 1),
-        ...item,
-        total_price: item.quantity * item.unit_price
-      })),
-      subtotal,
-      total_amount: totalAmount
+      customer_id: Number(form.customer_id),
+      invoice_date: form.invoice_date,
+      due_date: form.due_date || null,
+      notes: form.notes || '',
+      status: form.status || 'draft',
+      tax_amount: num(form.tax_amount),
+      discount_amount: num(form.discount_amount),
+      items: form.items.map(item => {
+        const quantity = num(item.quantity);
+        const unitPrice = num(item.unit_price);
+
+        return {
+          id: item.id || null,
+          item_id: Number(item.item_id),
+          item_name: item.item_name,
+          description: item.description || '',
+          quantity,
+          unit_price: unitPrice,
+          unit: item.unit || 'pcs',
+          total_price: quantity * unitPrice
+        };
+      })
     };
+
+    invoiceData.subtotal = invoiceData.items.reduce((sum, i) => sum + i.total_price, 0);
+    invoiceData.total_amount = invoiceData.subtotal + invoiceData.tax_amount - invoiceData.discount_amount;
 
     if (editingInvoice) {
       updateInvoice(editingInvoice.id, invoiceData);
@@ -136,19 +203,6 @@
     }
   }
 
-  function openWhatsAppModal(invoice) {
-    selectedInvoice = invoice;
-    showWhatsAppModal = true;
-  }
-
-  function getCustomerPhones(customerId) {
-    const customer = $customers.find(c => c.id === customerId);
-    if (customer && customer.whatsapp_numbers && customer.whatsapp_numbers.length > 0) {
-      return customer.whatsapp_numbers;
-    }
-    return [];
-  }
-
   function getStatusBadge(status) {
     const badges = {
       draft: 'bg-gray-100 text-gray-800',
@@ -160,123 +214,170 @@
   }
 
   async function handleDownload(invoice) {
+    if (!$hasInvoiceTemplate) return;
+
     downloadingId = invoice.id;
     try {
-      // Generate document first
-      await invoiceService.generate(invoice.id);
+      const template = $invoiceTemplates[0]; // default: template pertama
+      await invoiceService.generate(invoice.id, template?.id);
 
-      // Then download
       const blob = await invoiceService.download(invoice.id);
       const url = window.URL.createObjectURL(blob);
+
       const a = document.createElement('a');
       a.href = url;
       a.download = `${invoice.invoice_number}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
 
+      window.URL.revokeObjectURL(url);
       success('Invoice berhasil diunduh');
-    } catch (error) {
-      showError('Gagal mengunduh invoice: ' + error.message);
+    } catch (err) {
+      showError('Gagal generate / download invoice');
     } finally {
       downloadingId = null;
     }
+  }
+
+  function onItemChange(index) {
+    const item = form.items[index];
+    const master = item.item_id
+      ? $items.find(i => i.id === item.item_id)
+      : null;
+
+    if (!master) {
+      item.item_name = '';
+      item.description = '';
+      item.unit_price = 0;
+      item.unit = 'pcs';
+    } else {
+      item.item_name = master.name;
+      item.description = master.description || '';
+      item.unit_price = Number(master.unit_price) || 0;
+      item.unit = master.unit || 'pcs';
+    }
+
+    form.items = [...form.items];
   }
 </script>
 
 <div>
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Invoice</h1>
-    <button class="btn-primary" on:click={() => openModal()}>
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Invoice</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        {#if $selectedCompany}
+          Perusahaan: {$selectedCompany.name}
+        {:else}
+          Pilih perusahaan terlebih dahulu
+        {/if}
+      </p>
+    </div>
+    <button
+      class="btn-primary"
+      on:click={() => openModal()}
+      disabled={!$selectedCompany?.id}
+    >
       + Buat Invoice
     </button>
   </div>
 
-  <div class="card mb-6">
-    <input
-      type="text"
-      bind:value={searchTerm}
-      placeholder="Cari nomor invoice..."
-      class="input-field"
-    />
-  </div>
+  {#if !$selectedCompany?.id}
+    <div class="card text-center py-12">
+      <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+      </svg>
+      <h3 class="text-lg font-medium text-gray-900 mb-2">Pilih Perusahaan</h3>
+      <p class="text-gray-500">Silakan pilih perusahaan dari dropdown di sidebar untuk melihat daftar invoice.</p>
+    </div>
+  {:else}
+    <div class="card mb-6">
+      <input
+        type="text"
+        bind:value={searchTerm}
+        placeholder="Cari nomor invoice..."
+        class="input-field"
+      />
+    </div>
 
-  <div class="card">
-    <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead>
-          <tr>
-            <th class="px-6 py-3 table-header">No. Invoice</th>
-            <th class="px-6 py-3 table-header">Pelanggan</th>
-            <th class="px-6 py-3 table-header">Tanggal</th>
-            <th class="px-6 py-3 table-header">Total</th>
-            <th class="px-6 py-3 table-header">Status</th>
-            <th class="px-6 py-3 table-header">Aksi</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          {#if filteredInvoices.length === 0}
+    <div class="card">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead>
             <tr>
-              <td colspan="6" class="px-6 py-8 text-center text-gray-500">
-                Tidak ada invoice
-              </td>
+              <th class="px-6 py-3 table-header">No. Invoice</th>
+              <th class="px-6 py-3 table-header">Pelanggan</th>
+              <th class="px-6 py-3 table-header">Tanggal</th>
+              <th class="px-6 py-3 table-header">Total</th>
+              <th class="px-6 py-3 table-header">Status</th>
+              {#if $hasInvoiceTemplate}
+                <th class="px-6 py-3 table-header">Download</th>
+              {/if}
+              <th class="px-6 py-3 table-header">Aksi</th>
             </tr>
-          {:else}
-            {#each filteredInvoices as invoice}
-              {@const badge = getStatusBadge(invoice.status)}
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {invoice.invoice_number}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {getCustomerName(invoice.customer_id)}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {invoice.invoice_date}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                  {formatCurrency(invoice.total_amount)}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <span class="px-2 py-1 text-xs rounded-full {badge.class}">
-                    {badge.label}
-                  </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                  <button
-                    on:click={() => handleDownload(invoice)}
-                    class="text-purple-600 hover:text-purple-800"
-                    disabled={downloadingId === invoice.id}
-                  >
-                    {downloadingId === invoice.id ? 'Mengunduh...' : 'Download'}
-                  </button>
-                  <button
-                    on:click={() => openWhatsAppModal(invoice)}
-                    class="text-green-600 hover:text-green-800"
-                  >
-                    Kirim WA
-                  </button>
-                  <button
-                    on:click={() => openModal(invoice)}
-                    class="text-blue-600 hover:text-blue-800"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    on:click={() => handleDelete(invoice.id)}
-                    class="text-red-600 hover:text-red-800"
-                  >
-                    Hapus
-                  </button>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {#if filteredInvoices.length === 0}
+              <tr>
+                <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                  {searchTerm ? 'Tidak ada invoice yang cocok dengan pencarian' : 'Belum ada data invoice'}
                 </td>
               </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
+            {:else}
+              {#each filteredInvoices as invoice}
+                {@const badge = getStatusBadge(invoice.status)}
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {invoice.invoice_number}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {getCustomerName(invoice.customer_id)}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {invoice.invoice_date}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                    {formatCurrency(calculateInvoiceTotal(invoice))}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 py-1 text-xs rounded-full {badge.class}">
+                      {badge.label}
+                    </span>
+                  </td>
+                  {#if $hasInvoiceTemplate}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                      <button
+                        on:click={() => handleDownload(invoice)}
+                        class="text-purple-600 hover:text-purple-800"
+                        disabled={downloadingId === invoice.id}
+                      >
+                        {downloadingId === invoice.id ? 'Mengunduh...' : 'Download'}
+                      </button>
+                    </td>
+                  {/if}
+                  <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                    <button
+                      on:click={() => openModal(invoice)}
+                      class="text-blue-600 hover:text-blue-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      on:click={() => handleDelete(invoice.id)}
+                      class="text-red-600 hover:text-red-800"
+                    >
+                      Hapus
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+  {/if}
 </div>
 
 <Modal bind:show={showModal} title={editingInvoice ? 'Edit Invoice' : 'Buat Invoice'} size="xl">
@@ -309,11 +410,46 @@
       <div class="space-y-2">
         {#each form.items as item, i}
           <div class="grid grid-cols-12 gap-2 items-center">
-            <input type="text" bind:value={item.item_name} placeholder="Nama item" class="input-field col-span-3" />
-            <input type="text" bind:value={item.description} placeholder="Deskripsi" class="input-field col-span-3" />
-            <input type="number" bind:value={item.quantity} placeholder="Qty" class="input-field col-span-2" />
-            <input type="number" bind:value={item.unit_price} placeholder="Harga" class="input-field col-span-3" />
-            <button type="button" on:click={() => removeItem(i)} class="text-red-500 col-span-1">X</button>
+            <select
+              bind:value={item.item_id}
+              on:change={() => onItemChange(i)}
+              class="input-field col-span-3"
+            >
+              <option value={null}>Pilih item</option>
+              {#each $items as master}
+                <option value={master.id}>
+                  {master.name}
+                </option>
+              {/each}
+            </select>
+            <input
+              type="text"
+              value={item.description}
+              placeholder="Deskripsi"
+              class="input-field col-span-3 bg-gray-100"
+              disabled
+            />
+            <input 
+              type="number" 
+              bind:value={item.quantity} 
+              placeholder="Qty" 
+              class="input-field col-span-2" 
+              min="1" 
+            />
+            <input
+              type="number"
+              value={item.unit_price}
+              placeholder="Harga"
+              class="input-field col-span-3 bg-gray-100"
+              disabled
+            />
+            <button 
+              type="button" 
+              on:click={() => removeItem(i)} 
+              class="text-red-500 col-span-1"
+            >
+              X
+            </button>
           </div>
         {/each}
       </div>

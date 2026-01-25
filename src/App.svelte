@@ -15,9 +15,12 @@
   // Lazy load pages - Main App
   const Dashboard = () => import('./pages/Dashboard.svelte');
   const Customers = () => import('./pages/Customers.svelte');
+  const Items = () => import('./pages/Items.svelte');
   const Invoices = () => import('./pages/Invoices.svelte');
   const Waybills = () => import('./pages/Waybills.svelte');
   const Receipts = () => import('./pages/Receipts.svelte');
+  const Companies = () => import('./pages/Companies.svelte');
+  const TemplateEditorPage = () => import('./pages/TemplateEditor.svelte');
 
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
@@ -42,9 +45,12 @@
       <main class="flex-1 p-8">
         <LazyRoute path="/" component={Dashboard} />
         <LazyRoute path="/customers" component={Customers} />
+        <LazyRoute path="/items" component={Items} />
         <LazyRoute path="/invoices" component={Invoices} />
         <LazyRoute path="/waybills" component={Waybills} />
         <LazyRoute path="/receipts" component={Receipts} />
+        <LazyRoute path="/companies" component={Companies} />
+        <LazyRoute path="/template-editor" component={TemplateEditorPage} />
       </main>
     </div>
   {:else}

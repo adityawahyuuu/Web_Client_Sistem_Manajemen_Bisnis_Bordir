@@ -1,22 +1,34 @@
 import api from './api.js';
+import { get } from 'svelte/store';
+import { selectedCompany } from '../stores/company.js';
+import { error as errorNotify } from '../stores/notifications.js';
 
 export const waybillService = {
   async getAll(page = 1, limit = 100, status = '', customerId = '') {
     try {
-      let endpoint = `/waybills?page=${page}&limit=${limit}`;
+      const company = get(selectedCompany);
+      if (!company?.id) {
+        errorNotify('Silakan pilih perusahaan terlebih dahulu');
+        return null;
+      }
+
+      let endpoint = `/waybills/${company.id}?page=${page}&limit=${limit}`;
+
       if (status) {
         endpoint += `&status=${encodeURIComponent(status)}`;
       }
       if (customerId) {
         endpoint += `&customer_id=${encodeURIComponent(customerId)}`;
       }
+
       const response = await api.get(endpoint);
+
       return {
         data: response.data || [],
         meta: response.meta || { page, limit, total: 0, totalPages: 0 }
       };
-    } catch (error) {
-      console.error('Error fetching waybills:', error);
+    } catch (err) {
+      errorNotify(err.message || 'Gagal memuat data surat jalan');
       return null;
     }
   },
@@ -25,57 +37,89 @@ export const waybillService = {
     try {
       const response = await api.get(`/waybills/${id}`);
       return response.data || response;
-    } catch (error) {
-      console.error('Error fetching waybill:', error);
+    } catch (err) {
+      errorNotify(err.message || 'Gagal memuat detail surat jalan');
       return null;
     }
   },
 
   async create(data) {
-    // Transform items to match API format
-    const apiData = {
-      ...data,
-      items: data.items ? data.items.map(item => ({
-        name: item.item_name || item.name,
-        quantity: item.quantity,
-        unit: item.unit || 'pcs',
-        notes: item.notes || ''
-      })) : []
-    };
-    const response = await api.post('/waybills', apiData);
-    return response.data || response;
+    try {
+      const company = get(selectedCompany);
+      if (!company?.id) {
+        errorNotify('Silakan pilih perusahaan terlebih dahulu');
+        return null;
+      }
+
+      // Transform items to match API format
+      const apiData = {
+        ...data,
+        company_id: company.id,
+        items: data.items ? data.items.map(item => ({
+          name: item.item_name || item.name,
+          quantity: item.quantity,
+          unit: item.unit || 'pcs',
+          notes: item.notes || ''
+        })) : []
+      };
+      const response = await api.post(`/waybills/${company.id}`, apiData);
+      return response.data || response;
+    } catch (err) {
+      errorNotify(err.message || 'Gagal membuat surat jalan');
+      throw err;
+    }
   },
 
   async update(id, data) {
-    const response = await api.put(`/waybills/${id}`, data);
-    return response.data || response;
+    try {
+      const response = await api.put(`/waybills/${id}`, data);
+      return response.data || response;
+    } catch (err) {
+      errorNotify(err.message || 'Gagal memperbarui surat jalan');
+      throw err;
+    }
   },
 
   async delete(id) {
-    await api.delete(`/waybills/${id}`);
-    return true;
+    try {
+      await api.delete(`/waybills/${id}`);
+      return true;
+    } catch (err) {
+      errorNotify(err.message || 'Gagal menghapus surat jalan');
+      throw err;
+    }
   },
 
   async generate(id) {
-    const response = await api.post(`/waybills/${id}/generate`);
-    return response.data || response;
+    try {
+      const response = await api.post(`/waybills/${id}/generate`);
+      return response.data || response;
+    } catch (err) {
+      errorNotify(err.message || 'Gagal generate surat jalan');
+      throw err;
+    }
   },
 
   async download(id) {
-    const token = api.getAuthToken();
-    const url = `${api.baseUrl}/waybills/${id}/download`;
+    try {
+      const token = api.getAuthToken();
+      const url = `${api.baseUrl}/waybills/${id}/download`;
 
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download waybill');
       }
-    });
 
-    if (!response.ok) {
-      throw new Error('Failed to download waybill');
+      return response.blob();
+    } catch (err) {
+      errorNotify(err.message || 'Gagal download surat jalan');
+      throw err;
     }
-
-    return response.blob();
   }
 };
 

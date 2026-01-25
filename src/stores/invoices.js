@@ -4,6 +4,72 @@ import invoiceService from '../services/invoice.service.js';
 export const invoices = writable([]);
 export const invoicesLoading = writable(false);
 
+export const invoiceTemplates = writable([]);
+export const hasInvoiceTemplate = derived(
+  invoiceTemplates,
+  ($t) => Array.isArray($t) && $t.length > 0
+);
+
+// =============================================================================
+// HELPER
+// =============================================================================
+function decimalToNumber(decimal) {
+  if (typeof decimal === 'number') return decimal;
+  if (typeof decimal === 'string') return Number(decimal);
+
+  if (decimal?.d && decimal?.e !== undefined) {
+    const digits = decimal.d.join('');
+    return Number(digits) * Math.pow(10, decimal.e - (digits.length - 1));
+  }
+
+  return 0;
+}
+
+function formatDateStr(dateVal) {
+  if (!dateVal) return '';
+  if (typeof dateVal === 'string') return dateVal.split('T')[0];
+  if (dateVal instanceof Date) return dateVal.toISOString().split('T')[0];
+  return '';
+}
+
+function normalizeInvoiceItem(item) {
+  return {
+    id: item.id,
+    invoice_id: item.invoice_id,
+    item_id: item.item_id,
+    item_name: item.item_name || item.name || '',
+    description: item.description || '',
+    quantity: decimalToNumber(item.quantity),
+    unit_price: decimalToNumber(item.unit_price),
+    unit: item.unit || 'pcs',
+    total_price:
+      decimalToNumber(item.total_price) ||
+      decimalToNumber(item.quantity) * decimalToNumber(item.unit_price)
+  };
+}
+
+function normalizeInvoice(apiInvoice) {
+  return {
+    id: apiInvoice.id,
+    company_id: apiInvoice.company_id,
+    customer_id: apiInvoice.customer_id,
+    invoice_number: apiInvoice.invoice_number || '',
+    invoice_date: formatDateStr(apiInvoice.invoice_date),
+    due_date: formatDateStr(apiInvoice.due_date),
+    subtotal: decimalToNumber(apiInvoice.subtotal),
+    tax_amount: decimalToNumber(apiInvoice.tax_amount),
+    discount_amount: decimalToNumber(apiInvoice.discount_amount),
+    total_amount: decimalToNumber(apiInvoice.total_amount),
+    status: apiInvoice.status || 'draft',
+    notes: apiInvoice.notes || '',
+    generated_file_path: apiInvoice.generated_file_path || '',
+    created_by: apiInvoice.created_by,
+    created_at: apiInvoice.created_at,
+    updated_at: apiInvoice.updated_at,
+    items: (apiInvoice.invoice_items || apiInvoice.items || []).map(normalizeInvoiceItem)
+  };
+}
+
 export const invoiceCount = derived(invoices, $invoices => $invoices.length);
 
 export const invoiceStats = derived(invoices, $invoices => ({
@@ -11,7 +77,7 @@ export const invoiceStats = derived(invoices, $invoices => ({
   draft: $invoices.filter(i => i.status === 'draft').length,
   sent: $invoices.filter(i => i.status === 'sent').length,
   paid: $invoices.filter(i => i.status === 'paid').length,
-  totalAmount: $invoices.reduce((sum, i) => sum + (i.total_amount || 0), 0)
+  totalAmount: $invoices.reduce((sum, i) => sum + (parseFloat(i.total_amount) || 0), 0)
 }));
 
 let invoiceCounter = 2;
@@ -29,7 +95,8 @@ export async function loadInvoices() {
   try {
     const result = await invoiceService.getAll();
     if (result && result.data) {
-      invoices.set(result.data);
+      const normalized = result.data.map(normalizeInvoice);
+      invoices.set(normalized);
     }
   } catch (error) {
     console.error('Error loading invoices:', error);
@@ -59,7 +126,9 @@ export async function downloadInvoicePdf(id) {
 export async function addInvoice(invoice) {
   const result = await invoiceService.create(invoice);
   if (result) {
-    invoices.update(list => [...list, result]);
+    const normalized = normalizeInvoice(result);
+    invoices.update(list => [...list, normalized]);
+    return normalized;
   }
   return result;
 }
@@ -67,7 +136,9 @@ export async function addInvoice(invoice) {
 export async function updateInvoice(id, data) {
   const result = await invoiceService.update(id, data);
   if (result) {
-    invoices.update(list => list.map(i => i.id === id ? result : i));
+    const normalized = normalizeInvoice(result);
+    invoices.update(list => list.map(i => i.id === id ? normalized : i));
+    return normalized;
   }
   return result;
 }
@@ -83,4 +154,9 @@ export function getInvoiceById(id) {
     found = list.find(i => i.id === id);
   })();
   return found;
+}
+
+export async function loadInvoiceTemplates() {
+  const templates = await invoiceService.getPublishedTemplates();
+  invoiceTemplates.set(templates);
 }

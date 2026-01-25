@@ -44,4 +44,57 @@
   .sidebar-link.active {
     @apply bg-blue-50 text-blue-600;
   }
+
+  /* Template Editor specific styles */
+  .template-preview-a4 {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm;
+    background: white;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  @media print {
+    .template-preview-a4 {
+      width: 100%;
+      min-height: auto;
+      padding: 0;
+      box-shadow: none;
+    }
+  }
+}
+
+/* Svelte Toast customization */
+:root {
+  --toastContainerTop: auto;
+  --toastContainerRight: 1rem;
+  --toastContainerBottom: 1rem;
+  --toastContainerLeft: auto;
+  --toastWidth: 320px;
+  --toastMinHeight: 3rem;
+  --toastPadding: 0.75rem 1rem;
+  --toastBorderRadius: 0.5rem;
+}
+
+/* Print styles for template */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .template-renderer,
+  .template-renderer * {
+    visibility: visible;
+  }
+
+  .template-renderer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .no-print {
+    display: none !important;
+  }
 }

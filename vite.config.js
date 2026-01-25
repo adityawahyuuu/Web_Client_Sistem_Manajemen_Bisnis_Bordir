@@ -6,5 +6,16 @@ export default defineConfig({
   plugins: [svelte()],
   optimizeDeps: {
     exclude: ['svelte-routing']
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-tiptap': ['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-text-align'],
+          'vendor-utils': ['immer', 'lodash.debounce', 'ajv', 'sortablejs'],
+          'vendor-toast': ['@zerodevx/svelte-toast']
+        }
+      }
+    }
   }
 })

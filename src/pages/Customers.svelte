@@ -65,7 +65,7 @@
     editingCustomer = null;
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!form.name || !form.email) {
       showError('Nama dan email harus diisi');
       return;
@@ -76,21 +76,28 @@
       whatsapp_numbers: form.whatsapp_numbers.split(',').map(n => n.trim()).filter(n => n)
     };
 
-    if (editingCustomer) {
-      updateCustomer(editingCustomer.id, customerData);
-      success('Pelanggan berhasil diperbarui');
-    } else {
-      addCustomer(customerData);
-      success('Pelanggan berhasil ditambahkan');
+    try {
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.id, customerData);
+        success('Pelanggan berhasil diperbarui');
+      } else {
+        await addCustomer(customerData);
+        success('Pelanggan berhasil ditambahkan');
+      }
+      closeModal();
+    } catch (err) {
+      showError(err.message || 'Terjadi kesalahan');
     }
-
-    closeModal();
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
     if (confirm('Apakah Anda yakin ingin menghapus pelanggan ini?')) {
-      deleteCustomer(id);
-      success('Pelanggan berhasil dihapus');
+      try {
+        await deleteCustomer(id);
+        success('Pelanggan berhasil dihapus');
+      } catch (err) {
+        showError(err.message || 'Gagal menghapus pelanggan');
+      }
     }
   }
 </script>
