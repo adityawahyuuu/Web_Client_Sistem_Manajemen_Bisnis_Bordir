@@ -41,7 +41,8 @@ function normalizeItem(apiItem) {
     unit: apiItem.unit ?? 'pcs',
     unit_price: decimalToNumber(apiItem.unit_price),
     description: apiItem.description ?? '',
-    category: apiItem.category ?? ''
+    category: apiItem.category ?? '',
+    is_active: apiItem.is_active !== false // default true
   };
 }
 

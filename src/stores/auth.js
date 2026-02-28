@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import authService from '../services/auth.service.js';
+import api from '../services/api.js';
 
 /**
  * SECURITY: User data stored in memory only (Svelte store)
@@ -8,8 +9,58 @@ import authService from '../services/auth.service.js';
  */
 
 export const user = writable(null);
-export const isAuthenticated = writable(authService.isLoggedIn());
+export const isAuthenticated = writable(false);
 export const loading = writable(false);
+export const authInitializing = writable(true);
+
+/**
+ * Initialize auth state on app startup.
+ * Attempts to restore session via httpOnly refresh token cookie.
+ */
+export async function initAuth() {
+  // Skip refresh attempt on public routes (no session to restore)
+  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
+  const isPublicRoute = typeof window !== 'undefined' &&
+    publicRoutes.some(route => window.location.pathname.startsWith(route));
+  
+  if (isPublicRoute) {
+    authInitializing.set(false);
+    return;
+  }
+
+  // If already has valid token in memory
+  if (authService.isLoggedIn()) {
+    isAuthenticated.set(true);
+    authInitializing.set(false);
+    return;
+  }
+
+  try {
+    // Attempt to get new access token using httpOnly refresh token cookie
+    const refreshed = await api.refreshAccessToken();
+    if (refreshed) {
+      isAuthenticated.set(true);
+      // Load user profile after restoring session
+      try {
+        const profile = await authService.getProfile();
+        if (profile) {
+          user.set({
+            id: profile.id,
+            email: profile.email,
+            fullName: profile.full_name || profile.fullName || '',
+            role: profile.role || 'user'
+          });
+        }
+      } catch (e) {
+        // Profile fetch failed but token is valid, continue authenticated
+      }
+    }
+  } catch (e) {
+    // No valid refresh token cookie — user must login
+  } finally {
+    authInitializing.set(false);
+  }
+}
 
 export async function login(email, password) {
   loading.set(true);

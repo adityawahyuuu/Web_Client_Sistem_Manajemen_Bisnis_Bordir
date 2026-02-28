@@ -73,62 +73,32 @@ const companyService = {
   },
 
   /**
-   * Upload company logo
-   * @param {number} id
-   * @param {File} file
+   * Get company settings
+   * @param {number} companyId
    */
-  async uploadLogo(id, file) {
+  async getSettings(companyId) {
     try {
-      const formData = new FormData();
-      formData.append('logo', file);
-
-      const token = api.getAuthToken();
-      const url = `${api.baseUrl}/companies/${id}/logo`;
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to upload logo');
-      }
-
-      return response.json();
+      const response = await api.get(`/companies/${companyId}/settings`);
+      return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal upload logo');
+      errorNotify(err.message || 'Gagal memuat pengaturan perusahaan');
       throw err;
     }
   },
 
   /**
-   * Get company logo (binary)
-   * @param {number} id
+   * Update company settings
+   * @param {number} companyId
+   * @param {object} data - { invoice_prefix, primary_color, secondary_color, font_family, font_size,
+   *                         header_text, footer_text, terms_conditions, invoice_number_format,
+   *                         show_company_logo, show_company_address, show_tax_column, show_discount_column }
    */
-  async getLogo(id) {
+  async updateSettings(companyId, data) {
     try {
-      const token = api.getAuthToken();
-      const url = `${api.baseUrl}/companies/${id}/logo`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load company logo');
-      }
-
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      const response = await api.put(`/companies/${companyId}/settings`, data);
+      return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat logo perusahaan');
+      errorNotify(err.message || 'Gagal memperbarui pengaturan perusahaan');
       throw err;
     }
   }

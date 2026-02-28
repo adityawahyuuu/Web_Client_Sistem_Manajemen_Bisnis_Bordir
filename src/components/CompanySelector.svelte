@@ -5,23 +5,13 @@
     companies,
     selectedCompany,
     companiesLoading,
-    loadCompanies,
     selectCompany,
-    loadCompanyLogo,
-    loadCompaniesWithLogo
   } from '../stores/company.js';
-
 
   let isOpen = false;
   let dropdownRef;
 
-  $: if ($selectedCompany?.id && !$selectedCompany.logoUrl) {
-    loadCompanyLogo($selectedCompany.id);
-  }
-  
   onMount(() => {
-    loadCompaniesWithLogo();
-    
     // Close dropdown when clicking outside
     function handleClickOutside(event) {
       if (dropdownRef && !dropdownRef.contains(event.target)) {
@@ -64,17 +54,9 @@
       <span class="text-sm text-gray-400">Loading...</span>
     {:else if $selectedCompany}
       <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-        {#if $selectedCompany?.logoUrl}
-          <img
-            src={$selectedCompany.logoUrl}
-            alt={$selectedCompany.name}
-            class="w-full h-full rounded-full object-cover"
-          />
-        {:else}
-          <span class="text-xs font-semibold text-blue-600">
-            {getInitials($selectedCompany.name)}
-          </span>
-        {/if}
+        <span class="text-xs font-semibold text-blue-600">
+          {getInitials($selectedCompany.name)}
+        </span>
       </div>
       <div class="text-left hidden sm:block">
         <div class="text-sm font-medium text-gray-900 max-w-[150px] truncate">
@@ -103,7 +85,7 @@
   </button>
 
   {#if isOpen}
-    <div class="absolute top-full left-0 mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+    <div class="absolute top-full right-0 mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
       <!-- Company List -->
       <div class="max-h-64 overflow-y-auto">
         {#if $companies.length > 0}
@@ -114,11 +96,7 @@
               on:click={() => handleSelect(company)}
             >
               <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                {#if company.logoUrl}
-                  <img src={company.logoUrl} />
-                {:else}
-                  <span class="text-sm font-semibold text-blue-600">{getInitials(company.name)}</span>
-                {/if}
+                <span class="text-xs font-semibold text-blue-600">{getInitials(company.name)}</span>
               </div>
               <div class="flex-1 text-left min-w-0">
                 <div class="text-sm font-medium text-gray-900 truncate">{company.name}</div>

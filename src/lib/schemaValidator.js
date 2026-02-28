@@ -59,6 +59,20 @@ const templateSchemaDefinition = {
             fontSize: { type: 'string' },
             fontWeight: { type: 'string' }
           }
+        },
+        documentInfo: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            showTitle: { type: 'boolean' },
+            titleText: { type: 'string' },
+            fontSize: { type: 'string' },
+            fontWeight: { type: 'string' },
+            showNumber: { type: 'boolean' },
+            showDate: { type: 'boolean' },
+            showDueDate: { type: 'boolean' },
+            showStatus: { type: 'boolean' }
+          }
         }
       }
     },
@@ -227,7 +241,7 @@ export function validateTemplateSchema(schema) {
   }
 
   const errors = (validateSchema.errors || []).map(err => {
-    const path = err.instancePath || err.dataPath || '';
+    const path = err.instancePath || '';
     return `${path} ${err.message}`;
   });
 
@@ -276,6 +290,17 @@ export function getDefaultSchema() {
         text: 'INVOICE',
         fontSize: '24px',
         fontWeight: 'bold'
+      },
+      documentInfo: {
+        enabled: true,
+        showTitle: true,
+        titleText: 'INVOICE',
+        fontSize: '28px',
+        fontWeight: 'bold',
+        showNumber: true,
+        showDate: true,
+        showDueDate: true,
+        showStatus: false
       }
     },
     documentInfo: {

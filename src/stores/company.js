@@ -1,7 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import companyService from '../services/company.service.js';
 import { success, error as errorNotify } from './notifications.js';
-import { api } from '../services/api.js';
 
 // =============================================================================
 // STORES
@@ -15,6 +14,9 @@ export const selectedCompany = writable(null);
 
 /** @type {import('svelte/store').Writable<boolean>} Loading state */
 export const companiesLoading = writable(false);
+
+/** @type {import('svelte/store').Writable<object|null>} Active company settings */
+export const companySettings = writable(null);
 
 // =============================================================================
 // DERIVED STORES
@@ -75,6 +77,7 @@ export async function loadCompanies() {
   try {
     const result = await companyService.getAll();
     const companyList = result.data || result || [];
+
     companies.set(companyList);
 
     // Auto-select company
@@ -161,12 +164,12 @@ export async function updateCompany(id, data) {
     const result = await companyService.update(id, data);
     if (result) {
       const updated = result.data || result;
-      companies.update(list => list.map(c => c.id === id ? updated : c));
+      companies.update(list => list.map(c => c.id === id ? { ...c, ...updated } : c));
 
       // Update selected if it's the same
       const current = get(selectedCompany);
       if (current?.id === id) {
-        selectedCompany.set(updated);
+        selectedCompany.set({ ...current, ...updated });
       }
 
       success('Perusahaan berhasil diperbarui');
@@ -217,52 +220,37 @@ export function clearCompanyState() {
   localStorage.removeItem(SELECTED_COMPANY_KEY);
 }
 
-export async function loadCompanyLogo(companyId) {
+/**
+ * Load company settings
+ * @param {number} companyId
+ */
+export async function loadCompanySettings(companyId) {
   try {
-    const logoUrl = await companyService.getLogo(companyId);
-
-    selectedCompany.update(c =>
-      c ? { ...c, logoUrl } : c
-    );
-
-    return logoUrl;
-  } catch {
+    const settings = await companyService.getSettings(companyId);
+    companySettings.set(settings);
+    return settings;
+  } catch (err) {
+    console.error('Error loading company settings:', err);
     return null;
   }
 }
 
-export async function loadCompaniesWithLogo() {
-  companiesLoading.set(true);
-
-  const list = await loadCompanies(); // ambil list TANPA logo
-
-  const enriched = await Promise.all(
-    list.map(async (company) => {
-      try {
-        const logoUrl = await companyService.getLogo(company.id);
-        return { ...company, logoUrl };
-      } catch {
-        return { ...company, logoUrl: null };
-      }
-    })
-  );
-
-  companies.set(enriched);
-  companiesLoading.set(false);
-}
-
-export function updateCompanyLogo(companyId, logoUrl) {
-  companies.update(list =>
-    list.map(c =>
-      c.id === companyId
-        ? { ...c, logoUrl }
-        : c
-    )
-  );
-
-  selectedCompany.update(c =>
-    c?.id === companyId
-      ? { ...c, logoUrl }
-      : c
-  );
+/**
+ * Save company settings
+ * @param {number} companyId
+ * @param {object} data
+ */
+export async function saveCompanySettings(companyId, data) {
+  try {
+    const result = await companyService.updateSettings(companyId, data);
+    if (result) {
+      companySettings.set(result);
+      success('Pengaturan perusahaan berhasil disimpan');
+    }
+    return result;
+  } catch (err) {
+    console.error('Error saving company settings:', err);
+    errorNotify('Gagal menyimpan pengaturan perusahaan');
+    throw err;
+  }
 }

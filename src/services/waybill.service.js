@@ -4,7 +4,18 @@ import { selectedCompany } from '../stores/company.js';
 import { error as errorNotify } from '../stores/notifications.js';
 
 export const waybillService = {
-  async getAll(page = 1, limit = 100, status = '', customerId = '') {
+  /**
+   * Ambil daftar surat jalan dengan filter
+   * @param {{ page?, limit?, customer_id?, invoice_id?, status?, search? }} params
+   */
+  async getAll({
+    page = 1,
+    limit = 100,
+    customer_id = '',
+    invoice_id = '',
+    status = '',
+    search = ''
+  } = {}) {
     try {
       const company = get(selectedCompany);
       if (!company?.id) {
@@ -13,16 +24,12 @@ export const waybillService = {
       }
 
       let endpoint = `/waybills/${company.id}?page=${page}&limit=${limit}`;
-
-      if (status) {
-        endpoint += `&status=${encodeURIComponent(status)}`;
-      }
-      if (customerId) {
-        endpoint += `&customer_id=${encodeURIComponent(customerId)}`;
-      }
+      if (customer_id) endpoint += `&customer_id=${customer_id}`;
+      if (invoice_id)  endpoint += `&invoice_id=${invoice_id}`;
+      if (status)      endpoint += `&status=${encodeURIComponent(status)}`;
+      if (search)      endpoint += `&search=${encodeURIComponent(search)}`;
 
       const response = await api.get(endpoint);
-
       return {
         data: response.data || [],
         meta: response.meta || { page, limit, total: 0, totalPages: 0 }
@@ -33,9 +40,18 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Ambil detail surat jalan (termasuk waybill_items, customers, invoices)
+   * @param {number} id
+   */
   async getById(id) {
     try {
-      const response = await api.get(`/waybills/${id}`);
+      const company = get(selectedCompany);
+      if (!company?.id) {
+        errorNotify('Silakan pilih perusahaan terlebih dahulu');
+        return null;
+      }
+      const response = await api.get(`/waybills/${company.id}/${id}`);
       return response.data || response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memuat detail surat jalan');
@@ -43,6 +59,10 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Buat surat jalan baru
+   * @param {{ customer_id, invoice_id?, waybill_date?, destination_address?, destination_city?, destination_province?, expedition_name?, vehicle_number?, driver_name?, notes?, items? }} data
+   */
   async create(data) {
     try {
       const company = get(selectedCompany);
@@ -51,17 +71,28 @@ export const waybillService = {
         return null;
       }
 
-      // Transform items to match API format
       const apiData = {
-        ...data,
-        company_id: company.id,
-        items: data.items ? data.items.map(item => ({
-          name: item.item_name || item.name,
-          quantity: item.quantity,
-          unit: item.unit || 'pcs',
-          notes: item.notes || ''
-        })) : []
+        company_id:            company.id,
+        customer_id:           data.customer_id,
+        invoice_id:            data.invoice_id || undefined,
+        waybill_date:          data.waybill_date || undefined,
+        destination_address:   data.destination_address || undefined,
+        destination_city:      data.destination_city || undefined,
+        destination_province:  data.destination_province || undefined,
+        expedition_name:       data.expedition_name || undefined,
+        vehicle_number:        data.vehicle_number || undefined,
+        driver_name:           data.driver_name || undefined,
+        notes:                 data.notes || undefined,
+        items: data.items?.length
+          ? data.items.map(i => ({
+              name:     i.name,
+              quantity: Number(i.quantity) || 1,
+              unit:     i.unit || 'pcs',
+              notes:    i.notes || ''
+            }))
+          : undefined
       };
+
       const response = await api.post(`/waybills/${company.id}`, apiData);
       return response.data || response;
     } catch (err) {
@@ -70,9 +101,32 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Perbarui surat jalan (items TIDAK bisa diubah via PUT)
+   * @param {number} id
+   * @param {{ destination_address?, destination_city?, destination_province?, expedition_name?, vehicle_number?, driver_name?, notes?, status? }} data
+   */
   async update(id, data) {
     try {
-      const response = await api.put(`/waybills/${id}`, data);
+      const company = get(selectedCompany);
+      if (!company?.id) {
+        errorNotify('Silakan pilih perusahaan terlebih dahulu');
+        return null;
+      }
+
+      // Items TIDAK disertakan — hanya field yang diizinkan PUT
+      const apiData = {
+        destination_address:  data.destination_address,
+        destination_city:     data.destination_city,
+        destination_province: data.destination_province,
+        expedition_name:      data.expedition_name,
+        vehicle_number:       data.vehicle_number,
+        driver_name:          data.driver_name,
+        notes:                data.notes,
+        status:               data.status
+      };
+
+      const response = await api.put(`/waybills/${company.id}/${id}`, apiData);
       return response.data || response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memperbarui surat jalan');
@@ -80,9 +134,18 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Hapus surat jalan
+   * @param {number} id
+   */
   async delete(id) {
     try {
-      await api.delete(`/waybills/${id}`);
+      const company = get(selectedCompany);
+      if (!company?.id) {
+        errorNotify('Silakan pilih perusahaan terlebih dahulu');
+        return null;
+      }
+      await api.delete(`/waybills/${company.id}/${id}`);
       return true;
     } catch (err) {
       errorNotify(err.message || 'Gagal menghapus surat jalan');
@@ -90,9 +153,32 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Update status saja (PATCH /status)
+   * @param {number} id
+   * @param {'pending'|'in_transit'|'delivered'} status
+   */
+  async patchStatus(id, status) {
+    try {
+      const company = get(selectedCompany);
+      if (!company?.id) return null;
+      const response = await api.patch(`/waybills/${company.id}/${id}/status`, { status });
+      return response.data || response;
+    } catch (err) {
+      errorNotify(err.message || 'Gagal update status surat jalan');
+      throw err;
+    }
+  },
+
+  /**
+   * Generate PDF surat jalan (template statis)
+   * @param {number} id
+   */
   async generate(id) {
     try {
-      const response = await api.post(`/waybills/${id}/generate`);
+      const company = get(selectedCompany);
+      if (!company?.id) return null;
+      const response = await api.post(`/waybills/${company.id}/${id}/generate`);
       return response.data || response;
     } catch (err) {
       errorNotify(err.message || 'Gagal generate surat jalan');
@@ -100,21 +186,20 @@ export const waybillService = {
     }
   },
 
+  /**
+   * Unduh PDF surat jalan
+   * @param {number} id
+   */
   async download(id) {
     try {
+      const company = get(selectedCompany);
+      if (!company?.id) return null;
       const token = api.getAuthToken();
-      const url = `${api.baseUrl}/waybills/${id}/download`;
-
+      const url = `${api.baseUrl}/waybills/${company.id}/${id}/download`;
       const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to download waybill');
-      }
-
+      if (!response.ok) throw new Error('Gagal mengunduh surat jalan');
       return response.blob();
     } catch (err) {
       errorNotify(err.message || 'Gagal download surat jalan');

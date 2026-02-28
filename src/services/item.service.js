@@ -5,12 +5,13 @@ import { error as errorNotify } from '../stores/notifications.js';
 
 export const itemService = {
   /**
-   * Get all items for a company
+   * Ambil semua item untuk perusahaan yang aktif
    * @param {number} page
    * @param {number} limit
    * @param {string} search
+   * @param {boolean|null} is_active - filter aktif/nonaktif (null = semua)
    */
-  async getAll(page = 1, limit = 100, search = '') {
+  async getAll(page = 1, limit = 100, search = '', is_active = null) {
     try {
       const company = get(selectedCompany);
       if (!company?.id) {
@@ -21,6 +22,9 @@ export const itemService = {
       let endpoint = `/items/${company.id}?page=${page}&limit=${limit}`;
       if (search) {
         endpoint += `&search=${encodeURIComponent(search)}`;
+      }
+      if (is_active !== null) {
+        endpoint += `&is_active=${is_active}`;
       }
 
       const response = await api.get(endpoint);
@@ -35,7 +39,7 @@ export const itemService = {
   },
 
   /**
-   * Get item by ID
+   * Ambil detail item berdasarkan ID
    * @param {number} itemId
    */
   async getById(itemId) {
@@ -55,8 +59,8 @@ export const itemService = {
   },
 
   /**
-   * Create new item
-   * @param {object} data - { name, description, unit, unit_price, sku, category }
+   * Buat item baru
+   * @param {object} data - { item_code, item_name, description, unit, unit_price, category, is_active }
    */
   async create(data) {
     try {
@@ -75,9 +79,9 @@ export const itemService = {
   },
 
   /**
-   * Update item
+   * Perbarui item (item_code TIDAK bisa diubah setelah dibuat)
    * @param {number} itemId
-   * @param {object} data
+   * @param {object} data - { item_name?, description?, unit?, unit_price?, category?, is_active? }
    */
   async update(itemId, data) {
     try {
@@ -87,7 +91,17 @@ export const itemService = {
         return null;
       }
 
-      const response = await api.put(`/items/${company.id}/${itemId}`, data);
+      // item_code tidak diizinkan di PUT — hanya field yang sesuai spec
+      const apiData = {
+        item_name:   data.item_name,
+        description: data.description,
+        unit:        data.unit,
+        unit_price:  data.unit_price,
+        category:    data.category,
+        is_active:   data.is_active
+      };
+
+      const response = await api.put(`/items/${company.id}/${itemId}`, apiData);
       return response.data || response;
     } catch (err) {
       errorNotify(err.message || 'Gagal memperbarui item');
@@ -96,7 +110,7 @@ export const itemService = {
   },
 
   /**
-   * Delete item
+   * Hapus item
    * @param {number} itemId
    */
   async delete(itemId) {
@@ -116,7 +130,7 @@ export const itemService = {
   },
 
   /**
-   * Get customer-specific items
+   * Ambil daftar harga khusus item untuk pelanggan tertentu
    * @param {number} customerId
    */
   async getCustomerItems(customerId) {
@@ -127,21 +141,21 @@ export const itemService = {
         return null;
       }
 
-      const response = await api.get(`/items/${company.id}/${customerId}`);
+      const response = await api.get(`/items/${company.id}/customer/${customerId}`);
       return {
         data: response.data || [],
         meta: response.meta || {}
       };
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat item pelanggan');
+      errorNotify(err.message || 'Gagal memuat harga khusus pelanggan');
       return null;
     }
   },
 
   /**
-   * Add customer-specific item
+   * Tambah harga khusus item untuk pelanggan
    * @param {number} customerId
-   * @param {object} data
+   * @param {object} data - { id: item_id, custom_price?, notes? }
    */
   async createCustomerItem(customerId, data) {
     try {
@@ -151,16 +165,16 @@ export const itemService = {
         return null;
       }
 
-      const response = await api.post(`/items/${company.id}/${customerId}`, data);
+      const response = await api.post(`/items/${company.id}/customer/${customerId}`, data);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal membuat item pelanggan');
+      errorNotify(err.message || 'Gagal menambah harga khusus item');
       throw err;
     }
   },
 
   /**
-   * Delete customer-specific item
+   * Hapus harga khusus item pelanggan
    * @param {number} customerId
    * @param {number} customerItemId
    */
@@ -172,10 +186,10 @@ export const itemService = {
         return null;
       }
 
-      await api.delete(`/items/${company.id}/${customerId}/${customerItemId}`);
+      await api.delete(`/items/${company.id}/customer/${customerId}/${customerItemId}`);
       return true;
     } catch (err) {
-      errorNotify(err.message || 'Gagal menghapus item pelanggan');
+      errorNotify(err.message || 'Gagal menghapus harga khusus item');
       throw err;
     }
   }

@@ -27,25 +27,34 @@
     }
   }
 
-  // route-based trigger (bukan onMount)
-  $: if ($location.pathname === path || $location.pathname.startsWith(path + '/')) {
+  // Exact match for "/" prevents Dashboard from mounting on every sub-route.
+  // svelte-routing's <Route path="/"> uses prefix matching so its slot renders
+  // on /customers, /invoices, etc. — this guard corrects that behaviour.
+  $: isActive = path === '/'
+    ? $location.pathname === '/'
+    : $location.pathname === path || $location.pathname.startsWith(path + '/');
+
+  // Trigger lazy bundle load only when this route is active
+  $: if (isActive) {
     load();
   }
 </script>
 
 <Route {path}>
-  {#if loading}
-    <div class="flex items-center justify-center min-h-screen">
-      <div class="text-center">
-        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p class="mt-4 text-gray-600">Loading...</p>
+  {#if isActive}
+    {#if loading}
+      <div class="flex items-center justify-center min-h-screen">
+        <div class="text-center">
+          <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p class="mt-4 text-gray-600">Loading...</p>
+        </div>
       </div>
-    </div>
-  {:else if error}
-    <div class="flex items-center justify-center min-h-screen text-red-600">
-      <p>{error.message}</p>
-    </div>
-  {:else if LoadedComponent}
-    <svelte:component this={LoadedComponent} />
+    {:else if error}
+      <div class="flex items-center justify-center min-h-screen text-red-600">
+        <p>{error.message}</p>
+      </div>
+    {:else if LoadedComponent}
+      <svelte:component this={LoadedComponent} />
+    {/if}
   {/if}
 </Route>

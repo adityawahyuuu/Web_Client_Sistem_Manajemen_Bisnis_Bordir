@@ -4,7 +4,7 @@ import { selectedCompany } from '../stores/company.js';
 import { error as errorNotify } from '../stores/notifications.js';
 
 export const customerService = {
-  async getAll(page = 1, limit = 100, search = '') {
+  async getAll({ page = 1, limit = 100, search = '' } = {}) {
     try {
       const company = get(selectedCompany);
       if (!company?.id) {

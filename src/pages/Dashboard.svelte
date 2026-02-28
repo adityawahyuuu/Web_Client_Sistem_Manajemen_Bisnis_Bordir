@@ -1,289 +1,245 @@
 <script>
-  import { onMount } from 'svelte';
   import { link } from 'svelte-routing';
-  import { customerCount, loadCustomers } from '../stores/customers.js';
-  import { invoiceStats, loadInvoices } from '../stores/invoices.js';
+  import { customers, customerCount, loadCustomers } from '../stores/customers.js';
+  import { invoices, invoiceStats, invoicesLoading, loadInvoices } from '../stores/invoices.js';
   import { waybillStats, loadWaybills } from '../stores/waybills.js';
-  import { receiptStats, loadReceipts } from '../stores/receipts.js';
-  import { selectedCompany, hasCompanies, loadCompanies } from '../stores/company.js';
+  import { selectedCompany, hasCompanies } from '../stores/company.js';
+  import CompanySelector from '../components/CompanySelector.svelte';
 
-  onMount(async () => {
-    await loadCompanies();
+  $: if ($selectedCompany?.id) {
     loadCustomers();
     loadInvoices();
     loadWaybills();
-    loadReceipts();
-  });
-
-  function formatCurrency(amount) {
-    const value = Number(amount) || 0;
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(value);
   }
 
-  // Quick actions for the current company
-  const quickActions = [
-    {
-      label: 'Buat Invoice',
-      href: '/invoices',
-      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-      color: 'blue'
-    },
-    {
-      label: 'Edit Template',
-      href: '/template-editor',
-      icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
-      color: 'purple'
-    },
-    {
-      label: 'Tambah Pelanggan',
-      href: '/customers',
-      icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z',
-      color: 'green'
-    },
-    {
-      label: 'Kelola Perusahaan',
-      href: '/companies',
-      icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
-      color: 'orange'
-    }
-  ];
+  function formatCurrency(amount) {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency', currency: 'IDR', minimumFractionDigits: 0
+    }).format(Number(amount) || 0);
+  }
 
-  const colorClasses = {
-    blue: { bg: 'bg-blue-100', text: 'text-blue-600', hover: 'hover:bg-blue-50' },
-    green: { bg: 'bg-green-100', text: 'text-green-600', hover: 'hover:bg-green-50' },
-    purple: { bg: 'bg-purple-100', text: 'text-purple-600', hover: 'hover:bg-purple-50' },
-    orange: { bg: 'bg-orange-100', text: 'text-orange-600', hover: 'hover:bg-orange-50' },
-    yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600', hover: 'hover:bg-yellow-50' }
-  };
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function getInvoiceStatusBadge(status) {
+    const map = {
+      draft: 'bg-gray-100 text-gray-700',
+      sent: 'bg-blue-100 text-blue-700',
+      paid: 'bg-green-100 text-green-700'
+    };
+    const labels = { draft: 'Draft', sent: 'Terkirim', paid: 'Lunas' };
+    return { cls: map[status] || map.draft, label: labels[status] || status };
+  }
+
+  $: recentInvoices = $invoices.slice(0, 5);
 </script>
 
 <div>
-  <!-- Header with Company Context -->
-  <div class="flex items-center justify-between mb-6">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-      {#if $selectedCompany}
-        <p class="text-sm text-gray-500 mt-1">
-          Menampilkan data untuk <span class="font-medium text-gray-700">{$selectedCompany.name}</span>
-        </p>
-      {/if}
+  <!-- Top bar -->
+  <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+    <div class="flex-1"></div>
+    <div class="ml-auto flex-shrink-0">
+      <CompanySelector />
     </div>
+  </div>
+
+  <!-- Content -->
+  <div class="p-6">
 
     {#if !$hasCompanies}
-      <a
-        href="/companies"
-        use:link
-        class="btn-primary flex items-center gap-2"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        Buat Perusahaan
-      </a>
+      <!-- No company state -->
+      <div class="max-w-lg mx-auto mt-12 text-center">
+        <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-2">Selamat Datang!</h2>
+        <p class="text-gray-500 mb-6">Buat perusahaan pertama Anda untuk mulai mengelola invoice, surat jalan, dan kwitansi.</p>
+        <a href="/companies" use:link class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Buat Perusahaan
+        </a>
+      </div>
+
+    {:else if !$selectedCompany}
+      <!-- Company not selected -->
+      <div class="max-w-lg mx-auto mt-12 text-center">
+        <div class="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-2">Pilih Perusahaan</h2>
+        <p class="text-gray-500">Pilih perusahaan dari dropdown di atas untuk melihat dashboard.</p>
+      </div>
+
+    {:else}
+      <!-- Dashboard content -->
+      <div class="mb-6">
+        <h1 class="text-xl font-semibold text-gray-900">Beranda</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Ringkasan data untuk <span class="font-medium text-gray-700">{$selectedCompany.name}</span></p>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <a href="/invoices" use:link class="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 hover:shadow-sm transition-all group">
+          <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-100 transition-colors">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-gray-700">Buat Invoice</p>
+          <p class="text-xs text-gray-400 mt-0.5">Tambah invoice baru</p>
+        </a>
+
+        <a href="/receipts" use:link class="bg-white rounded-xl border border-gray-200 p-5 hover:border-green-300 hover:shadow-sm transition-all group">
+          <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-green-100 transition-colors">
+            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-gray-700">Buat Kwitansi</p>
+          <p class="text-xs text-gray-400 mt-0.5">Catat pembayaran</p>
+        </a>
+
+        <a href="/waybills" use:link class="bg-white rounded-xl border border-gray-200 p-5 hover:border-orange-300 hover:shadow-sm transition-all group">
+          <div class="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-orange-100 transition-colors">
+            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-gray-700">Surat Jalan</p>
+          <p class="text-xs text-gray-400 mt-0.5">Kelola pengiriman</p>
+        </a>
+
+        <a href="/customers" use:link class="bg-white rounded-xl border border-gray-200 p-5 hover:border-purple-300 hover:shadow-sm transition-all group">
+          <div class="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-purple-100 transition-colors">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-gray-700">Pelanggan</p>
+          <p class="text-xs text-gray-400 mt-0.5">Kelola data pelanggan</p>
+        </a>
+      </div>
+
+      <!-- Stats cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Total Pelanggan</p>
+          <p class="text-3xl font-bold text-gray-900">{$customerCount}</p>
+          <a href="/customers" use:link class="text-xs text-blue-600 hover:underline mt-2 inline-block">Lihat semua →</a>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Total Invoice</p>
+          <p class="text-3xl font-bold text-gray-900">{$invoiceStats.total}</p>
+          <div class="flex gap-2 mt-2">
+            <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{$invoiceStats.draft} draft</span>
+            <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{$invoiceStats.paid} lunas</span>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Surat Jalan</p>
+          <p class="text-3xl font-bold text-gray-900">{$waybillStats.total}</p>
+          <div class="flex gap-2 mt-2">
+            <span class="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{$waybillStats.pending} menunggu</span>
+            <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{$waybillStats.delivered} terkirim</span>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Nilai Invoice</p>
+          <p class="text-2xl font-bold text-gray-900 leading-tight">{formatCurrency($invoiceStats.totalAmount)}</p>
+          <p class="text-xs text-gray-400 mt-2">Total nilai semua invoice</p>
+        </div>
+      </div>
+
+      <!-- Recent invoices + Invoice status -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Recent invoices table -->
+        <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-900">Invoice Terbaru</h2>
+            <a href="/invoices" use:link class="text-xs text-blue-600 hover:underline">Lihat semua</a>
+          </div>
+          {#if $invoicesLoading}
+            <div class="flex items-center justify-center py-12">
+              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            </div>
+          {:else if recentInvoices.length === 0}
+            <div class="py-12 text-center text-gray-400 text-sm">Belum ada invoice</div>
+          {:else}
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-gray-100">
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">No. Invoice</th>
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Tanggal</th>
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Total</th>
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                {#each recentInvoices as invoice}
+                  {@const badge = getInvoiceStatusBadge(invoice.status)}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-3 text-sm font-medium text-blue-600">{invoice.invoice_number}</td>
+                    <td class="px-5 py-3 text-sm text-gray-600">{formatDate(invoice.invoice_date)}</td>
+                    <td class="px-5 py-3 text-sm font-medium text-gray-900">{formatCurrency(invoice.total_amount)}</td>
+                    <td class="px-5 py-3">
+                      <span class="px-2 py-0.5 rounded-full text-xs font-medium {badge.cls}">{badge.label}</span>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+
+        <!-- Right column: Invoice status breakdown + shortcuts -->
+        <div class="space-y-4">
+          <!-- Invoice status summary -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 class="text-sm font-semibold text-gray-900 mb-4">Status Invoice</h2>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-2 h-2 rounded-full bg-gray-400"></div>
+                  <span class="text-sm text-gray-600">Draft</span>
+                </div>
+                <span class="text-sm font-semibold text-gray-900">{$invoiceStats.draft}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <span class="text-sm text-gray-600">Terkirim</span>
+                </div>
+                <span class="text-sm font-semibold text-gray-900">{$invoiceStats.sent}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span class="text-sm text-gray-600">Lunas</span>
+                </div>
+                <span class="text-sm font-semibold text-gray-900">{$invoiceStats.paid}</span>
+              </div>
+              <div class="border-t border-gray-100 pt-3 mt-3 flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-700">Total Nilai</span>
+                <span class="text-sm font-bold text-blue-600">{formatCurrency($invoiceStats.totalAmount)}</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
     {/if}
   </div>
-
-  <!-- No Company Warning -->
-  {#if !$hasCompanies}
-    <div class="card bg-yellow-50 border border-yellow-200 mb-6">
-      <div class="flex items-start gap-4">
-        <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0">
-          <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-yellow-800">Belum ada perusahaan</h3>
-          <p class="text-sm text-yellow-700 mt-1">
-            Anda perlu membuat perusahaan terlebih dahulu untuk mulai menggunakan sistem invoice.
-            Setiap perusahaan dapat memiliki template dokumen sendiri.
-          </p>
-          <a
-            href="/companies"
-            use:link
-            class="inline-flex items-center gap-1 text-sm font-medium text-yellow-800 hover:text-yellow-900 mt-2"
-          >
-            Buat Perusahaan Sekarang
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </a>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Quick Actions -->
-  {#if $hasCompanies}
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      {#each quickActions as action}
-        <a
-          href={action.href}
-          use:link
-          class="card {colorClasses[action.color].hover} border-2 border-transparent hover:border-{action.color}-200 transition-all group"
-        >
-          <div class="flex flex-col items-center text-center py-2">
-            <div class="w-12 h-12 {colorClasses[action.color].bg} rounded-lg flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-              <svg class="w-6 h-6 {colorClasses[action.color].text}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={action.icon} />
-              </svg>
-            </div>
-            <span class="text-sm font-medium text-gray-700">{action.label}</span>
-          </div>
-        </a>
-      {/each}
-    </div>
-  {/if}
-
-  <!-- Stats Cards -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-    <div class="card">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
-        <div>
-          <p class="text-sm text-gray-500">Total Pelanggan</p>
-          <p class="text-2xl font-bold text-gray-900">{$customerCount}</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <div>
-          <p class="text-sm text-gray-500">Total Invoice</p>
-          <p class="text-2xl font-bold text-gray-900">{$invoiceStats.total}</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div>
-          <p class="text-sm text-gray-500">Surat Jalan</p>
-          <p class="text-2xl font-bold text-gray-900">{$waybillStats.total}</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-        </div>
-        <div>
-          <p class="text-sm text-gray-500">Total Kwitansi</p>
-          <p class="text-2xl font-bold text-gray-900">{$receiptStats.total}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Invoice Status -->
-    <div class="card">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Status Invoice</h2>
-        <a href="/invoices" use:link class="text-sm text-blue-600 hover:text-blue-700">
-          Lihat Semua
-        </a>
-      </div>
-      <div class="space-y-3">
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Draft</span>
-          <span class="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm">{$invoiceStats.draft}</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Terkirim</span>
-          <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">{$invoiceStats.sent}</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Lunas</span>
-          <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">{$invoiceStats.paid}</span>
-        </div>
-        <div class="border-t pt-3 mt-3">
-          <div class="flex justify-between items-center">
-            <span class="font-medium">Total Nilai</span>
-            <span class="font-bold text-blue-600">{formatCurrency($invoiceStats.totalAmount)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Payment Summary -->
-    <div class="card">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Ringkasan Pembayaran</h2>
-        <a href="/receipts" use:link class="text-sm text-blue-600 hover:text-blue-700">
-          Lihat Semua
-        </a>
-      </div>
-      <div class="space-y-3">
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Transfer Bank</span>
-          <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">{$receiptStats.byMethod?.transfer || 0}</span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-gray-600">Tunai</span>
-          <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">{$receiptStats.byMethod?.cash || 0}</span>
-        </div>
-        <div class="border-t pt-3 mt-3">
-          <div class="flex justify-between items-center">
-            <span class="font-medium">Total Diterima</span>
-            <span class="font-bold text-green-600">{formatCurrency($receiptStats.totalAmount)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Template Editor Quick Access Card -->
-  {#if $selectedCompany}
-    <div class="card mt-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-gray-900">Template Dokumen</h3>
-            <p class="text-sm text-gray-600">
-              Kustomisasi template invoice, surat jalan, dan kwitansi untuk {$selectedCompany.name}
-            </p>
-          </div>
-        </div>
-        <a
-          href="/template-editor"
-          use:link
-          class="btn-primary flex items-center gap-2"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Edit Template
-        </a>
-      </div>
-    </div>
-  {/if}
 </div>

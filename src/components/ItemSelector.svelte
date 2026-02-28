@@ -117,7 +117,7 @@
       const createdItem = await createItem({
         name: newItemForm.name,
         unit: newItemForm.unit,
-        unit_price: parseFloat(newItemForm.unit_price) || 0
+        unit_price: Number(newItemForm.unit_price) || 0
       });
 
       if (createdItem) {

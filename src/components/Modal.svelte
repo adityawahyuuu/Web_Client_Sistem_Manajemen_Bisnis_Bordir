@@ -1,7 +1,12 @@
 <script>
+  import { createEventDispatcher } from 'svelte';
+
   export let show = false;
   export let title = '';
   export let size = 'md';
+  export let shake = false;
+
+  const dispatch = createEventDispatcher();
 
   const sizeClasses = {
     sm: 'max-w-md',
@@ -11,7 +16,11 @@
   };
 
   function close() {
-    show = false;
+    dispatch('close');
+  }
+
+  function onAnimationEnd() {
+    shake = false;
   }
 </script>
 
@@ -20,7 +29,10 @@
     <div class="flex items-center justify-center min-h-screen p-4">
       <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" on:click={close}></div>
 
-      <div class="relative bg-white rounded-lg shadow-xl w-full {sizeClasses[size]}">
+      <div
+        class="relative bg-white rounded-lg shadow-xl w-full {sizeClasses[size]} {shake ? 'modal-shake' : ''}"
+        on:animationend={onAnimationEnd}
+      >
         <div class="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-900">{title}</h3>
           <button on:click={close} class="text-gray-400 hover:text-gray-600">
@@ -37,3 +49,19 @@
     </div>
   </div>
 {/if}
+
+<style>
+  @keyframes modal-shake {
+    0%, 100% { transform: translateX(0); }
+    15%       { transform: translateX(-10px); }
+    30%       { transform: translateX(10px); }
+    45%       { transform: translateX(-7px); }
+    60%       { transform: translateX(7px); }
+    75%       { transform: translateX(-4px); }
+    90%       { transform: translateX(4px); }
+  }
+
+  .modal-shake {
+    animation: modal-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+</style>

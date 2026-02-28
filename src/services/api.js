@@ -1,109 +1,81 @@
-import { API_BASE_URL } from './config.js';
 import tokenStorage from './tokenStorage.js';
+const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api/v1';
 
 class ApiService {
   constructor() {
-    this.baseUrl = API_BASE_URL;
-    this.refreshTokenPromise = null;
+    this.baseUrl = window.location.origin + API_PREFIX;
+    this._refreshPromise = null;
   }
 
-  /**
-   * Get access token from secure memory storage
-   * @returns {string|null}
-   */
+  /** @returns {string|null} */
   getAuthToken() {
     return tokenStorage.getAccessToken();
   }
 
   /**
-   * Set tokens securely (tokens stored in memory)
-   * @param {string} accessToken - JWT access token
-   * @param {number} expiresIn - Token expiration in seconds
-   * @param {string} refreshToken - Optional refresh token for manual refresh
+   * Store access token in memory and schedule proactive refresh.
+   * @param {string} accessToken
+   * @param {number} expiresIn - seconds
    */
-  setTokens(accessToken, expiresIn, refreshToken) {
+  setTokens(accessToken, expiresIn) {
     tokenStorage.setAccessToken(accessToken, expiresIn);
-    if (refreshToken) {
-      tokenStorage.setRefreshToken(refreshToken);
-    }
+    tokenStorage.scheduleRefresh(() => this.refreshAccessToken());
   }
 
-  /**
-   * Get refresh token from memory
-   * @returns {string|null}
-   */
-  getRefreshToken() {
-    return tokenStorage.getRefreshToken();
-  }
-
-  /**
-   * Clear all tokens from memory
-   */
   clearTokens() {
     tokenStorage.clearTokens();
-    this.refreshTokenPromise = null;
+    this._refreshPromise = null;
   }
 
-  /**
-   * Check if user has valid token
-   * @returns {boolean}
-   */
+  /** @returns {boolean} */
   isAuthenticated() {
     return tokenStorage.hasValidToken();
   }
 
   /**
-   * Refresh access token using httpOnly refresh token cookie
-   * @returns {Promise<boolean>} - True if refresh successful
+   * Refresh access token via httpOnly cookie.
+   * Deduplicates concurrent calls.
+   * @returns {Promise<boolean>}
    */
   async refreshAccessToken() {
-    // Prevent multiple simultaneous refresh requests
-    if (this.refreshTokenPromise) {
-      return this.refreshTokenPromise;
-    }
+    if (this._refreshPromise) return this._refreshPromise;
 
-    this.refreshTokenPromise = (async () => {
+    this._refreshPromise = (async () => {
       try {
-        // Call refresh endpoint (backend should read refresh token from httpOnly cookie)
-        const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+        const response = await fetch(`${this.baseUrl}/auth/refresh-token`, {
           method: 'POST',
-          credentials: 'include', // Include httpOnly cookies
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
         });
 
-        if (!response.ok) {
-          throw new Error('Token refresh failed');
-        }
+        if (!response.ok) return false;
 
-        const data = await response.json();
+        const responseJson = await response.json();
 
-        if (data.type === 'success' && data.auth) {
-          const { accessToken, expiresIn, refreshToken } = data.auth;
-          this.setTokens(accessToken, expiresIn, refreshToken);
+        if (responseJson.type === 'success' && responseJson.data.auth) {
+          this.setTokens(responseJson.data.auth.accessToken, responseJson.data.auth.expiresIn);
           return true;
         }
 
         return false;
-      } catch (error) {
-        console.error('Token refresh error:', error);
-        this.clearTokens();
+      } catch {
         return false;
       } finally {
-        this.refreshTokenPromise = null;
+        this._refreshPromise = null;
       }
     })();
 
-    return this.refreshTokenPromise;
+    return this._refreshPromise;
   }
 
+  /**
+   * Central request method with automatic 401 retry.
+   */
   async request(endpoint, options = {}) {
-    // Skip token refresh for login/refresh endpoints
-    const skipRefresh = endpoint.includes('/auth/login') || endpoint.includes('/auth/refresh');
+    const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/refresh-token');
 
-    // Check if token needs refresh before making request
-    if (!skipRefresh && tokenStorage.shouldRefreshToken()) {
+    // Proactive: refresh before request if token is expiring soon
+    if (!isAuthEndpoint && tokenStorage.isExpiringSoon()) {
       await this.refreshAccessToken();
     }
 
@@ -114,47 +86,41 @@ class ApiService {
       ...options.headers
     };
 
-    // Add JWT Bearer token if available
     const token = this.getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Build fetch config
+    /** @type {RequestInit} */
     const fetchOptions = {
       method: options.method || 'GET',
       headers,
-      credentials: /** @type {RequestCredentials} */ ('include')
+      credentials: 'include'
     };
 
-    // Add body if present
     if (options.body && typeof options.body === 'object') {
       fetchOptions.body = JSON.stringify(options.body);
     }
 
     try {
       const response = await fetch(url, fetchOptions);
-
-      // Check if response is JSON
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      const isJson = contentType && contentType.includes('application/json');
+
+      if (isJson) {
         const data = await response.json();
 
-        // If response is not ok, throw with API message
         if (!response.ok) {
-          // Handle 401 Unauthorized - try to refresh token once
-          if (response.status === 401 && !skipRefresh) {
+          // 401 — attempt one refresh + retry (skip if already retried or auth endpoint)
+          if (response.status === 401 && !options._isRetry && !isAuthEndpoint) {
             const refreshed = await this.refreshAccessToken();
-
             if (refreshed) {
-              // Retry original request with new token
               return this.request(endpoint, { ...options, _isRetry: true });
-            } else {
-              // Refresh failed, clear tokens and redirect to login
-              this.clearTokens();
-              if (typeof window !== 'undefined') {
-                window.location.href = '/login';
-              }
+            }
+            // Refresh failed — clear session, redirect to login
+            this.clearTokens();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
             }
           }
 
@@ -164,7 +130,6 @@ class ApiService {
         return data;
       }
 
-      // Non-JSON response
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -172,15 +137,6 @@ class ApiService {
       return response;
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
-
-      // Don't retry if this was already a retry
-      if (error.message.includes('401') && !options._isRetry && !skipRefresh) {
-        const refreshed = await this.refreshAccessToken();
-        if (refreshed) {
-          return this.request(endpoint, { ...options, _isRetry: true });
-        }
-      }
-
       throw error;
     }
   }
@@ -195,6 +151,10 @@ class ApiService {
 
   put(endpoint, body, options = {}) {
     return this.request(endpoint, { ...options, method: 'PUT', body });
+  }
+
+  patch(endpoint, body, options = {}) {
+    return this.request(endpoint, { ...options, method: 'PATCH', body });
   }
 
   delete(endpoint, options = {}) {
