@@ -11,15 +11,74 @@
     selectCompany,
     loadCompanies,
   } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
+  import api from '../services/api.js';
+  import companyService from '../services/company.service.js';
   import Modal from '../components/Modal.svelte';
   import DataTable from '../components/DataTable.svelte';
+  import SearchableSelect from '../components/SearchableSelect.svelte';
+
+  // ── Country codes ──────────────────────────────────────────────
+  const countryCodes = [
+    { code: '62', flag: '🇮🇩', name: 'Indonesia' },
+    { code: '60', flag: '🇲🇾', name: 'Malaysia' },
+    { code: '65', flag: '🇸🇬', name: 'Singapura' },
+    { code: '61', flag: '🇦🇺', name: 'Australia' },
+    { code: '1',  flag: '🇺🇸', name: 'Amerika' },
+  ];
 
   let searchTerm = '';
   let selectedIds = [];
   let showModal = false;
   let shakeModal = false;
   let editingCompany = null;
+  let activeTab = 'info';
+
+  // ── Company settings ────────────────────────────────────────────
+  let settingsLoading = false;
+  let savingSettings = false;
+  let settings = {
+    invoice_prefix: '',
+    invoice_number_format: '',
+    header_text: '',
+    footer_text: '',
+    terms_conditions: '',
+    show_company_logo: true,
+    show_company_address: true,
+    show_tax_column: true,
+    show_discount_column: true,
+  };
+
+  async function loadSettings(companyId) {
+    settingsLoading = true;
+    try {
+      const res = await companyService.getSettings(companyId);
+      if (res) {
+        settings = {
+          invoice_prefix:       res.invoice_prefix       ?? '',
+          invoice_number_format: res.invoice_number_format ?? '',
+          header_text:          res.header_text          ?? '',
+          footer_text:          res.footer_text          ?? '',
+          terms_conditions:     res.terms_conditions     ?? '',
+          show_company_logo:    res.show_company_logo    ?? true,
+          show_company_address: res.show_company_address ?? true,
+          show_tax_column:      res.show_tax_column      ?? true,
+          show_discount_column: res.show_discount_column ?? true,
+        };
+      }
+    } catch { /* error handled by service */ }
+    finally { settingsLoading = false; }
+  }
+
+  async function handleSaveSettings() {
+    savingSettings = true;
+    try {
+      await companyService.updateSettings(editingCompany.id, settings);
+      success('Pengaturan perusahaan berhasil disimpan');
+      forceCloseModal();
+    } catch { /* error handled by service */ }
+    finally { savingSettings = false; }
+  }
 
   let form = {
     name: '',
@@ -28,12 +87,69 @@
     city: '',
     province: '',
     postal_code: '',
-    phone: '',
+    phone_raw: '',
+    phone_code: '62',
     email: ''
   };
 
-  let touched = { name: false };
-  $: nameValid = form.name.trim().length > 0;
+  let touched = { name: false, email: false, phone: false };
+  $: nameValid  = form.name.trim().length > 0;
+  $: emailValid = !form.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  $: phoneFlag  = countryCodes.find(c => c.code === form.phone_code)?.flag ?? '🇮🇩';
+  $: phoneNormalized = form.phone_raw.trim() ? (parsePhoneForSubmit(form.phone_raw, form.phone_code) ?? '') : '';
+  $: phoneDigits     = phoneNormalized ? (phoneNormalized.length - form.phone_code.length + 1) : 0;
+  $: phoneValid      = !form.phone_raw.trim() || (phoneDigits >= 11 && phoneDigits <= 15);
+
+  function stripCountryCode(phone, code) {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits.startsWith(code)) return digits.slice(code.length);
+    if (digits.startsWith('0'))  return digits.slice(1);
+    return digits;
+  }
+
+  function parsePhoneForSubmit(raw, code) {
+    const digits = (raw || '').replace(/\D/g, '');
+    if (!digits) return undefined;
+    if (digits.startsWith(code)) return digits;
+    if (digits.startsWith('0'))  return code + digits.slice(1);
+    return code + digits;
+  }
+
+  function displayPhone(phone) {
+    if (!phone) return '-';
+    const digits = phone.replace(/\D/g, '');
+    if (digits.startsWith('62')) return '0' + digits.slice(2);
+    return digits;
+  }
+
+  // ── Location (province → city cascade) ────────────────────────
+  let provinces = [];
+  let cities = [];
+  let provincesLoading = false;
+  let citiesLoading = false;
+
+  async function loadProvinces() {
+    if (provinces.length > 0) return;
+    provincesLoading = true;
+    try {
+      const res = await api.get('/master/provinces');
+      provinces = res.data ?? res ?? [];
+    } catch { provinces = []; } finally { provincesLoading = false; }
+  }
+
+  async function onProvinceChange() {
+    form.city = '';
+    cities = [];
+    if (!form.province) return;
+    const province = provinces.find(p => p.name === form.province);
+    if (!province) return;
+    citiesLoading = true;
+    try {
+      const res = await api.get(`/master/cities?province_code=${province.code ?? province.id}`);
+      cities = res.data ?? res ?? [];
+    } catch { cities = []; } finally { citiesLoading = false; }
+  }
 
   // Filter
   let showFilterPanel = false;
@@ -64,9 +180,13 @@
 
   onMount(() => { loadCompanies(); });
 
-  function openModal(company = null) {
+  async function openModal(company = null) {
     editingCompany = company;
-    touched = { name: false };
+    activeTab = 'info';
+    touched = { name: false, email: false, phone: false };
+    cities = [];
+    await loadProvinces();
+
     if (company) {
       form = {
         name: company.name || '',
@@ -75,28 +195,47 @@
         city: company.city || '',
         province: company.province || '',
         postal_code: company.postal_code || '',
-        phone: company.phone || '',
+        phone_raw:  stripCountryCode(company.phone, '62'),
+        phone_code: '62',
         email: company.email || ''
       };
+      // Re-hydrate city dropdown dari province name
+      if (company.province) {
+        const province = provinces.find(p => p.name === company.province);
+        if (province) {
+          citiesLoading = true;
+          try {
+            const res = await api.get(`/master/cities?province_code=${province.code ?? province.id}`);
+            cities = res.data ?? res ?? [];
+          } catch { cities = []; } finally { citiesLoading = false; }
+        }
+      }
+      loadSettings(company.id);
     } else {
-      form = { name: '', domain: '', address: '', city: '', province: '', postal_code: '', phone: '', email: '' };
+      form = { name: '', domain: '', address: '', city: '', province: '', postal_code: '', phone_raw: '', phone_code: '62', email: '' };
     }
     showModal = true;
   }
 
   function closeModal() {
-    if (touched.name && !nameValid) { shakeModal = true; return; }
+    const hasInvalidTouched =
+      (touched.name  && !nameValid) ||
+      (touched.email && !emailValid) ||
+      (touched.phone && !phoneValid);
+    if (hasInvalidTouched) { shakeModal = true; return; }
     forceCloseModal();
   }
 
   function forceCloseModal() {
     showModal = false;
     editingCompany = null;
+    activeTab = 'info';
+    cities = [];
   }
 
   async function handleSubmit() {
-    touched = { name: true };
-    if (!nameValid) { shakeModal = true; return; }
+    touched = { name: true, email: true, phone: true };
+    if (!nameValid || !emailValid || !phoneValid) { shakeModal = true; return; }
 
     try {
       const payload = {
@@ -106,7 +245,7 @@
         city: form.city || undefined,
         province: form.province || undefined,
         postal_code: form.postal_code || undefined,
-        phone: form.phone || undefined,
+        phone: parsePhoneForSubmit(form.phone_raw, form.phone_code),
         email: form.email || undefined,
       };
 
@@ -124,12 +263,17 @@
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} perusahaan terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteCompany(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} perusahaan terpilih?`)) return;
+    const toDelete = $companies.filter(c => selectedIds.includes(c.id));
+    const succeededIds = [], failedNames = [];
+    for (const c of toDelete) {
+      try { await deleteCompany(c.id); succeededIds.push(c.id); }
+      catch { failedNames.push(c.name || `#${c.id}`); }
     }
-    selectedIds = [];
-    success('Perusahaan terpilih berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(c => succeededIds.includes(c.id)).map(c => c.name || `#${c.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
+    if (failedNames.length) showError(`Gagal dihapus: ${failedNames.join(', ')}`);
   }
 
   function handleSelect(company) {
@@ -294,16 +438,24 @@
           </div>
         </td>
         <td class="px-4 py-3 text-sm text-gray-600">{row.original._location}</td>
-        <td class="px-4 py-3 text-sm text-gray-600">{row.original.phone || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-600">{row.original.phone ? displayPhone(row.original.phone) : '-'}</td>
         <td class="px-4 py-3 text-sm text-gray-600">{row.original.email || '-'}</td>
         <td class="px-4 py-3">
           {#if $selectedCompany?.id === row.original.id}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500 text-white">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+              </svg>
               Aktif
             </span>
           {:else}
-            <button on:click={() => handleSelect(row.original)}
-              class="text-xs text-blue-600 hover:underline font-medium">
+            <button
+              on:click={() => handleSelect(row.original)}
+              class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-gray-200 rounded-full text-gray-500 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0"/>
+              </svg>
               Pilih
             </button>
           {/if}
@@ -320,94 +472,176 @@
   title={editingCompany ? 'Edit Perusahaan' : 'Tambah Perusahaan'}
   size="lg"
 >
+  <!-- Tab bar (hanya saat edit) -->
+  {#if editingCompany}
+    <div class="flex border-b border-gray-200 mb-5 -mt-1">
+      <button type="button"
+        class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+          {activeTab === 'info' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        on:click={() => activeTab = 'info'}>
+        Info Perusahaan
+      </button>
+      <button type="button"
+        class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+          {activeTab === 'settings' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        on:click={() => activeTab = 'settings'}>
+        Pengaturan
+      </button>
+    </div>
+  {/if}
+
+  <!-- Tab: Info Perusahaan -->
+  {#if activeTab === 'info'}
   <form on:submit|preventDefault={handleSubmit} class="space-y-4">
 
-    <!-- Nama (mandatory, floating label) -->
-    <div class="relative">
-      <input
-        type="text"
-        id="company-name"
-        bind:value={form.name}
-        on:blur={() => (touched.name = true)}
-        placeholder=" "
-        class="peer w-full px-3 pt-5 pb-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors
-          {touched.name
-            ? nameValid
-              ? 'border-green-400 bg-green-50 focus:ring-green-400'
-              : 'border-red-400 bg-red-50 focus:ring-red-400'
-            : 'border-gray-200 bg-gray-50 focus:ring-blue-500'}"
-      />
-      <label for="company-name"
-        class="absolute left-3 top-1 text-xs font-medium transition-colors
-          {touched.name ? (nameValid ? 'text-green-600' : 'text-red-500') : 'text-gray-500'}">
-        Nama Perusahaan *
-      </label>
-      {#if touched.name && nameValid}
-        <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0"/>
-        </svg>
-      {/if}
+    <!-- Nama (required) -->
+    <div>
+      <div class="relative rounded-lg border px-3 pt-2 pb-2 transition-colors
+        {touched.name
+          ? (nameValid ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50')
+          : 'border-gray-200 bg-gray-50'}">
+        <label class="block text-xs font-semibold uppercase tracking-wide
+          {touched.name ? (nameValid ? 'text-green-600' : 'text-red-500') : 'text-gray-400'}">
+          NAMA PERUSAHAAN <span class="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          bind:value={form.name}
+          on:blur={() => touched.name = true}
+          placeholder="PT. CONTOH JAYA"
+          maxlength="255"
+          class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 pr-7"
+        />
+        {#if touched.name && nameValid}
+          <div class="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+        {/if}
+      </div>
       {#if touched.name && !nameValid}
-        <p class="text-xs text-red-500 mt-1">Nama perusahaan wajib diisi</p>
+        <p class="text-red-500 text-xs mt-1 font-medium">NAMA PERUSAHAAN HARUS DIISI</p>
       {/if}
     </div>
 
     <!-- Domain -->
-    <div>
-      <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Domain</label>
-      <input type="text" bind:value={form.domain}
-        class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        placeholder="contoh.com" />
+    <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+      <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">DOMAIN</label>
+      <input type="text" bind:value={form.domain} placeholder="CONTOH.COM" maxlength="255"
+        class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300" />
     </div>
 
     <!-- Alamat -->
-    <div>
-      <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Alamat</label>
-      <textarea bind:value={form.address} rows="2"
-        class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-        placeholder="Jl. Contoh No. 123"></textarea>
+    <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+      <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">ALAMAT</label>
+      <textarea bind:value={form.address} rows="2" placeholder="JL. CONTOH NO. 123"
+        class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 resize-none"></textarea>
     </div>
 
-    <!-- Kota / Provinsi / Kode Pos -->
+    <!-- Provinsi / Kota / Kode Pos -->
     <div class="grid grid-cols-3 gap-3">
-      <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Kota</label>
-        <input type="text" bind:value={form.city}
-          class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Jakarta" />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Provinsi</label>
-        <input type="text" bind:value={form.province}
-          class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="DKI Jakarta" />
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Kode Pos</label>
-        <input type="text" bind:value={form.postal_code}
-          class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="10110" />
+      <SearchableSelect
+        label="PROVINSI"
+        bind:value={form.province}
+        options={provinces.map(p => ({ value: p.name, label: p.name }))}
+        placeholder="PILIH PROVINSI"
+        loading={provincesLoading}
+        on:change={onProvinceChange}
+      />
+      <SearchableSelect
+        label="KOTA/KABUPATEN"
+        bind:value={form.city}
+        options={cities.map(c => ({ value: c.name, label: c.name }))}
+        placeholder="PILIH KOTA"
+        disabled={!form.province}
+        loading={citiesLoading}
+      />
+      <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">KODE POS</label>
+        <input type="text" bind:value={form.postal_code} placeholder="10110" maxlength="10"
+          class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300" />
       </div>
     </div>
 
     <!-- Telepon / Email -->
     <div class="grid grid-cols-2 gap-4">
+      <!-- TELEPON dengan country code picker -->
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Telepon</label>
-        <input type="text" bind:value={form.phone}
-          class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="021-1234567" />
+        <div class="flex gap-2">
+          <div class="flex items-center gap-1.5 px-3 border border-gray-200 bg-gray-50 rounded-lg shrink-0">
+            <span class="text-lg leading-none">{phoneFlag}</span>
+            <select bind:value={form.phone_code}
+              class="bg-transparent text-sm text-gray-600 focus:outline-none cursor-pointer">
+              {#each countryCodes as cc}
+                <option value={cc.code}>+{cc.code}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="relative flex-1 rounded-lg border px-3 pt-2 pb-2 transition-colors
+            {touched.phone && form.phone_raw.trim()
+              ? (phoneValid ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50')
+              : 'border-gray-200 bg-gray-50'}">
+            <label class="block text-xs font-semibold uppercase tracking-wide
+              {touched.phone && form.phone_raw.trim()
+                ? (phoneValid ? 'text-green-600' : 'text-red-500')
+                : 'text-gray-400'}">TELEPON</label>
+            <input
+              type="tel"
+              bind:value={form.phone_raw}
+              on:blur={() => touched.phone = true}
+              on:keypress={(e) => { if (!/\d/.test(e.key)) e.preventDefault(); }}
+              on:paste={(e) => { e.preventDefault(); const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, ''); document.execCommand('insertText', false, digits); }}
+              placeholder="8023456789"
+              maxlength="15"
+              class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 pr-7"
+            />
+            {#if touched.phone && form.phone_raw.trim() && phoneValid}
+              <div class="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+            {/if}
+          </div>
+        </div>
+        {#if touched.phone && form.phone_raw.trim() && !phoneValid}
+          <p class="text-red-500 text-xs mt-1 font-medium">NOMOR TELEPON {phoneDigits} DIGIT (MIN 11, MAKS 15)</p>
+        {/if}
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Email</label>
-        <input type="email" bind:value={form.email}
-          class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="info@perusahaan.com" />
+        <div class="relative rounded-lg border px-3 pt-2 pb-2 transition-colors
+          {touched.email && form.email.trim()
+            ? (emailValid ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50')
+            : 'border-gray-200 bg-gray-50'}">
+          <label class="block text-xs font-semibold uppercase tracking-wide
+            {touched.email && form.email.trim()
+              ? (emailValid ? 'text-green-600' : 'text-red-500')
+              : 'text-gray-400'}">EMAIL</label>
+          <input
+            type="email"
+            bind:value={form.email}
+            on:blur={() => touched.email = true}
+            placeholder="INFO@PERUSAHAAN.COM"
+            maxlength="255"
+            class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 pr-7"
+          />
+          {#if touched.email && form.email.trim() && emailValid}
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+              <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+          {/if}
+        </div>
+        {#if touched.email && form.email.trim() && !emailValid}
+          <p class="text-red-500 text-xs mt-1 font-medium">FORMAT EMAIL SALAH (contoh: email@gmail.com)</p>
+        {/if}
       </div>
     </div>
 
     <!-- Action buttons -->
-    <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+    <div class="flex items-center justify-between pt-4">
       <button type="button" on:click={forceCloseModal}
         class="flex items-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,4 +659,93 @@
     </div>
 
   </form>
+  {/if}
+
+  <!-- Tab: Pengaturan (hanya saat edit) -->
+  {#if activeTab === 'settings'}
+    <div class="space-y-4">
+      {#if settingsLoading}
+        <div class="flex items-center justify-center py-10">
+          <div class="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
+        </div>
+      {:else}
+        <!-- Prefix & Format Nomor Invoice -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">PREFIX INVOICE</label>
+            <input type="text" bind:value={settings.invoice_prefix} placeholder="contoh: AAJ"
+              maxlength="20"
+              class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 uppercase" />
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-100 px-3 pt-2 pb-2">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">FORMAT NOMOR</label>
+            <input type="text" bind:value={settings.invoice_number_format} placeholder="contoh: &#123;prefix&#125;/&#123;year&#125;/&#123;seq&#125;"
+              disabled
+              class="w-full bg-transparent text-sm text-gray-400 focus:outline-none placeholder-gray-300 cursor-not-allowed" />
+          </div>
+        </div>
+
+        <!-- Header & Footer -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">HEADER DOKUMEN</label>
+            <textarea bind:value={settings.header_text} rows="3" placeholder="Teks header pada dokumen cetak"
+              class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 resize-none"></textarea>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">FOOTER DOKUMEN</label>
+            <textarea bind:value={settings.footer_text} rows="3" placeholder="Teks footer pada dokumen cetak"
+              class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 resize-none"></textarea>
+          </div>
+        </div>
+
+        <!-- Syarat & Ketentuan -->
+        <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
+          <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">SYARAT & KETENTUAN</label>
+          <textarea bind:value={settings.terms_conditions} rows="4" placeholder="Syarat dan ketentuan yang tertera di dokumen"
+            class="w-full bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 resize-none"></textarea>
+        </div>
+
+        <!-- Toggle tampilan dokumen -->
+        <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">TAMPILAN DOKUMEN CETAK</p>
+          {#each [
+            { key: 'show_company_logo',    label: 'Tampilkan logo perusahaan' },
+            { key: 'show_company_address', label: 'Tampilkan alamat perusahaan' },
+            { key: 'show_tax_column',      label: 'Tampilkan kolom pajak' },
+            { key: 'show_discount_column', label: 'Tampilkan kolom diskon' },
+          ] as opt}
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" bind:checked={settings[opt.key]}
+                class="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer" />
+              <span class="text-sm text-gray-700">{opt.label}</span>
+            </label>
+          {/each}
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex items-center justify-between pt-4">
+          <button type="button" on:click={forceCloseModal}
+            class="flex items-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            BATAL
+          </button>
+          <button type="button" on:click={handleSaveSettings} disabled={savingSettings}
+            class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {#if savingSettings}
+              <div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+            {:else}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0"/>
+              </svg>
+            {/if}
+            SIMPAN PENGATURAN
+          </button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
 </Modal>

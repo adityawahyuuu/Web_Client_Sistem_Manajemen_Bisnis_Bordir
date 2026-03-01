@@ -2,6 +2,15 @@ import { writable } from 'svelte/store';
 
 export const notifications = writable([]);
 
+// ── Confirm dialog ─────────────────────────────────────────────
+export const confirmState = writable(null);
+
+export function confirmDialog(message) {
+  return new Promise(resolve => {
+    confirmState.set({ message, resolve });
+  });
+}
+
 let notificationId = 0;
 
 export function addNotification(message, type = 'info', duration = 3000) {

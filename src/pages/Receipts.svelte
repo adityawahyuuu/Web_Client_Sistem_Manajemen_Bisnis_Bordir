@@ -1,9 +1,9 @@
 <script>
   import { receipts, receiptsLoading, loadReceipts, addReceipt, updateReceipt, deleteReceipt } from '../stores/receipts.js';
-  import { invoices, loadInvoices } from '../stores/invoices.js';
+  import { invoices, loadInvoices, loadInvoicePayments } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
   import { selectedCompany } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
   import receiptService from '../services/receipt.service.js';
   import * as XLSX from 'xlsx';
   import Modal from '../components/Modal.svelte';
@@ -18,6 +18,8 @@
   let shakeModal = false;
   let editingReceipt = null;
   let downloadingId = null;
+  let isLunas = false;          // true jika invoice terpilih sudah lunas
+  let singlePaymentMethod = ''; // binding untuk single-select mode
 
   // ── Payment method multi-select ────────────────────────────────
   let showPaymentDropdown = false;
@@ -63,8 +65,8 @@
     customer_id:    '',
     receipt_date:   new Date().toISOString().split('T')[0],
     amount:         0,
-    payment_method: ['cash'],
-    status:         'dp',
+    payment_method: [],
+    status:         '',
     description:    '',
     received_by:    '',
     notes:          ''
@@ -127,26 +129,87 @@
 
   function getPaymentMethodLabel(method) {
     const map = { cash: 'Tunai', transfer: 'Transfer', check: 'Cek', other: 'Lainnya' };
-    if (!method) return '-';
-    return String(method).split(',').map(m => map[m.trim()] || m.trim()).join(', ');
+    if (!method || (Array.isArray(method) && method.length === 0)) return '-';
+    const methods = Array.isArray(method)
+      ? method
+      : String(method).split(',').map(m => m.trim()).filter(Boolean);
+    return methods.map(m => map[m] || m).join(', ') || '-';
   }
 
-  function onInvoiceChange() {
+  function onCustomerChange() {
+    touched.customer = true;
+    // Customer cleared → reset semua field
+    if (!form.customer_id) {
+      form.invoice_id = '';
+      form.amount = 0; amountDisplay = '';
+      form.payment_method = []; isLunas = false; singlePaymentMethod = '';
+      form.status = '';
+      form.notes = ''; form.description = ''; form.received_by = '';
+    } else {
+      // Customer berganti → reset invoice + autofill fields
+      form.invoice_id = '';
+      form.amount = 0; amountDisplay = '';
+      form.payment_method = []; isLunas = false; singlePaymentMethod = '';
+      form.status = '';
+      form.notes = '';
+    }
+  }
+
+  async function onInvoiceChange() {
     touched.invoice = true;
-    if (editingReceipt || !form.invoice_id) return;
+    if (!form.invoice_id) {
+      // Invoice cleared → reset autofill (pertahankan pelanggan)
+      form.amount = 0; amountDisplay = '';
+      form.payment_method = []; isLunas = false; singlePaymentMethod = '';
+      form.status = '';
+      form.notes = '';
+      return;
+    }
+    if (editingReceipt) return;
     const inv = $invoices.find(i => String(i.id) === String(form.invoice_id));
     if (!inv) return;
-    // Autofill JUMLAH → sisa piutang
-    const sisa = Math.max(0, inv.total_amount - inv.total_paid);
-    form.amount = sisa;
-    amountDisplay = sisa > 0 ? Number(sisa).toLocaleString('id-ID') : '';
-    // Autofill STATUS
-    form.status = (inv.total_paid >= inv.total_amount && inv.total_amount > 0)
+    // Hitung total setelah diskon item + diskon invoice
+    const itemsSubtotal = (inv.items || []).reduce((sum, i) => {
+      const discType = (i.discount_type || '').toLowerCase();
+      const discPerUnit = (discType === 'pct' || discType === 'persen')
+        ? Number(i.unit_price) * Number(i.discount_amount) / 100
+        : Number(i.discount_amount);
+      return sum + Number(i.quantity) * (Number(i.unit_price) - discPerUnit);
+    }, 0);
+    const computedTotal = itemsSubtotal - Number(inv.discount_amount) + Number(inv.shipping_cost) + Number(inv.tax_amount);
+    const totalPaid = Number(inv.total_paid);
+    // Tentukan status
+    const determinedStatus = (totalPaid >= computedTotal && computedTotal > 0)
       ? 'lunas'
-      : inv.total_paid > 0 ? 'dp' : 'piutang';
-    // Autofill CATATAN jika ada kelebihan bayar
-    const overpay = inv.total_paid - inv.total_amount;
-    if (overpay > 0) form.notes = `Kelebihan bayar: ${formatCurrency(overpay)}`;
+      : totalPaid > 0 ? 'dp' : 'piutang';
+    isLunas = determinedStatus === 'lunas';
+    singlePaymentMethod = '';
+    form.payment_method = [];
+    form.status = determinedStatus;
+    // JUMLAH: lunas → computedTotal; selainnya → sisa piutang
+    const amount = determinedStatus === 'lunas'
+      ? computedTotal
+      : Math.max(0, computedTotal - totalPaid);
+    form.amount = amount;
+    amountDisplay = amount > 0 ? Number(amount).toLocaleString('id-ID') : '';
+    // Autofill METODE PEMBAYARAN hanya untuk invoice lunas (multiple select)
+    if (isLunas) {
+      try {
+        const paymentsRaw = await loadInvoicePayments(form.invoice_id);
+        const payments = Array.isArray(paymentsRaw)
+          ? paymentsRaw
+          : (paymentsRaw?.invoice_payments || paymentsRaw?.payments || []);
+        const methods = [...new Set(
+          payments.flatMap(p =>
+            p.payment_method ? String(p.payment_method).split(',').map(m => m.trim()).filter(Boolean) : []
+          )
+        )];
+        if (methods.length > 0) form.payment_method = methods;
+      } catch { /* biarkan default */ }
+    }
+    // Catatan jika kelebihan bayar
+    const overpay = totalPaid - computedTotal;
+    form.notes = overpay > 0 ? `Kelebihan bayar: ${formatCurrency(overpay)}` : '';
   }
 
   function getStatusBadge(status) {
@@ -173,22 +236,27 @@
   function openModal(receipt = null) {
     editingReceipt = receipt;
     touched = { customer: false, invoice: false, amount: false };
+    isLunas = receipt ? (receipt.status === 'lunas') : false;
+    const parsedMethods = receipt
+      ? (Array.isArray(receipt.payment_method)
+          ? receipt.payment_method
+          : String(receipt.payment_method || '').split(',').map(m => m.trim()).filter(Boolean))
+      : [];
+    singlePaymentMethod = (receipt && !isLunas) ? (parsedMethods[0] || '') : '';
     form = receipt ? {
       invoice_id:     receipt.invoice_id  ? String(receipt.invoice_id)  : '',
       customer_id:    receipt.customer_id ? String(receipt.customer_id) : '',
       receipt_date:   receipt.receipt_date   || new Date().toISOString().split('T')[0],
       amount:         receipt.amount         || 0,
-      payment_method: receipt.payment_method
-        ? String(receipt.payment_method).split(',').map(m => m.trim()).filter(Boolean)
-        : ['cash'],
-      status:         receipt.status         || 'dp',
+      payment_method: parsedMethods,
+      status:         receipt.status         || '',
       description:    receipt.description    || '',
       received_by:    receipt.received_by    || '',
       notes:          receipt.notes          || ''
     } : {
       invoice_id: '', customer_id: '',
       receipt_date: new Date().toISOString().split('T')[0],
-      amount: 0, payment_method: ['cash'], status: 'dp',
+      amount: 0, payment_method: [], status: '',
       description: '', received_by: '', notes: ''
     };
     amountDisplay = form.amount > 0 ? Number(form.amount).toLocaleString('id-ID') : '';
@@ -220,7 +288,7 @@
       if (editingReceipt) {
         await updateReceipt(editingReceipt.id, {
           amount:         form.amount,
-          payment_method: form.payment_method.join(',') || 'cash',
+          payment_method: form.payment_method.length ? form.payment_method : ['cash'],
           status:         form.status,
           description:    form.description  || undefined,
           received_by:    form.received_by  || undefined,
@@ -233,7 +301,7 @@
           invoice_id:     Number(form.invoice_id),
           receipt_date:   form.receipt_date,
           amount:         form.amount,
-          payment_method: form.payment_method.join(',') || 'cash',
+          payment_method: form.payment_method.length ? form.payment_method : ['cash'],
           status:         form.status,
           description:    form.description  || undefined,
           received_by:    form.received_by  || undefined,
@@ -248,21 +316,30 @@
   }
 
   async function handleDelete(id) {
-    if (!confirm('Yakin ingin menghapus kuitansi ini?')) return;
+    const item = $receipts.find(r => r.id === id);
+    const name = item?.receipt_number || `#${id}`;
+    if (!await confirmDialog('Yakin ingin menghapus kuitansi ini?')) return;
     try {
       await deleteReceipt(id);
       selectedIds = selectedIds.filter(i => i !== id);
-      success('Kuitansi berhasil dihapus');
-    } catch {}
+      success(`"${name}" berhasil dihapus`);
+    } catch {
+      showError(`Gagal menghapus "${name}"`);
+    }
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} kuitansi terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteReceipt(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} kuitansi terpilih?`)) return;
+    const toDelete = $receipts.filter(r => selectedIds.includes(r.id));
+    const succeededIds = [], failedNames = [];
+    for (const r of toDelete) {
+      try { await deleteReceipt(r.id); succeededIds.push(r.id); }
+      catch { failedNames.push(r.receipt_number || `#${r.id}`); }
     }
-    selectedIds = [];
-    success('Kuitansi berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(r => succeededIds.includes(r.id)).map(r => r.receipt_number || `#${r.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
+    if (failedNames.length) showError(`Gagal dihapus: ${failedNames.join(', ')}`);
   }
 
   async function handleDownload(receipt) {
@@ -473,7 +550,7 @@
             options={$customers.map(c => ({ value: String(c.id), label: c.name }))}
             placeholder="PILIH PELANGGAN"
             disabled={!!editingReceipt}
-            on:change={() => { touched.customer = true; form.invoice_id = ''; }}
+            on:change={onCustomerChange}
           />
           {#if touched.customer && !customerValid}
             <p class="text-red-500 text-xs mt-1 font-medium">PELANGGAN HARUS DIPILIH</p>
@@ -541,82 +618,94 @@
 
       <!-- METODE & STATUS -->
       <div class="grid grid-cols-2 gap-4">
-        <!-- METODE PEMBAYARAN (multiple, searchable) -->
-        <div class="relative">
-          <button
-            type="button"
-            on:click={() => showPaymentDropdown = !showPaymentDropdown}
-            class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2 text-left cursor-pointer hover:border-gray-300 transition-colors
-              {showPaymentDropdown ? 'border-blue-400 ring-1 ring-blue-200' : ''}"
-          >
-            <span class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-0.5">METODE PEMBAYARAN</span>
-            <div class="flex items-center justify-between gap-2 min-h-[1.25rem]">
-              {#if form.payment_method.length === 0}
-                <span class="text-sm text-gray-400">PILIH METODE</span>
-              {:else}
-                <div class="flex flex-wrap gap-1">
-                  {#each form.payment_method as m}
-                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
-                      {getPaymentMethodLabel(m)}
-                      <span
-                        role="button"
-                        tabindex="0"
-                        on:click|stopPropagation={() => togglePaymentMethod(m)}
-                        on:keydown={(e) => e.key === 'Enter' && togglePaymentMethod(m)}
-                        class="hover:text-blue-900 cursor-pointer leading-none"
-                      >
-                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
+        <!-- METODE PEMBAYARAN: single jika belum lunas, multiple jika lunas -->
+        {#if isLunas}
+          <!-- Multiple select — invoice sudah lunas -->
+          <div class="relative">
+            <button
+              type="button"
+              on:click={() => showPaymentDropdown = !showPaymentDropdown}
+              class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2 text-left cursor-pointer hover:border-gray-300 transition-colors
+                {showPaymentDropdown ? 'border-blue-400 ring-1 ring-blue-200' : ''}"
+            >
+              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-0.5">METODE PEMBAYARAN</span>
+              <div class="flex items-center justify-between gap-2 min-h-[1.25rem]">
+                {#if form.payment_method.length === 0}
+                  <span class="text-sm text-gray-400">PILIH METODE</span>
+                {:else}
+                  <div class="flex flex-wrap gap-1">
+                    {#each form.payment_method as m}
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
+                        {getPaymentMethodLabel(m)}
+                        <span
+                          role="button"
+                          tabindex="0"
+                          on:click|stopPropagation={() => togglePaymentMethod(m)}
+                          on:keydown={(e) => e.key === 'Enter' && togglePaymentMethod(m)}
+                          class="hover:text-blue-900 cursor-pointer leading-none"
+                        >
+                          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/>
+                          </svg>
+                        </span>
                       </span>
-                    </span>
+                    {/each}
+                  </div>
+                {/if}
+                <svg class="w-4 h-4 text-gray-400 transition-transform duration-150 shrink-0 {showPaymentDropdown ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </div>
+            </button>
+            {#if showPaymentDropdown}
+              <div class="fixed inset-0 z-[59]" on:click={() => { showPaymentDropdown = false; paymentMethodSearch = ''; }}></div>
+              <div class="absolute z-[60] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                <div class="p-2 border-b border-gray-100">
+                  <div class="relative">
+                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+                    </svg>
+                    <input
+                      bind:value={paymentMethodSearch}
+                      type="text"
+                      placeholder="Cari..."
+                      class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50"
+                    />
+                  </div>
+                </div>
+                <div class="max-h-40 overflow-y-auto">
+                  {#each filteredPaymentOptions as opt (opt.value)}
+                    <button
+                      type="button"
+                      on:click={() => togglePaymentMethod(opt.value)}
+                      class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors
+                        {form.payment_method.includes(opt.value) ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-gray-50'}"
+                    >
+                      <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0
+                        {form.payment_method.includes(opt.value) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}">
+                        {#if form.payment_method.includes(opt.value)}
+                          <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        {/if}
+                      </div>
+                      {opt.label}
+                    </button>
                   {/each}
                 </div>
-              {/if}
-              <svg class="w-4 h-4 text-gray-400 transition-transform duration-150 shrink-0 {showPaymentDropdown ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </div>
-          </button>
-          {#if showPaymentDropdown}
-            <div class="fixed inset-0 z-[59]" on:click={() => { showPaymentDropdown = false; paymentMethodSearch = ''; }}></div>
-            <div class="absolute z-[60] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-              <div class="p-2 border-b border-gray-100">
-                <div class="relative">
-                  <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
-                  </svg>
-                  <input
-                    bind:value={paymentMethodSearch}
-                    type="text"
-                    placeholder="Cari..."
-                    class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50"
-                  />
-                </div>
               </div>
-              <div class="max-h-40 overflow-y-auto">
-                {#each filteredPaymentOptions as opt (opt.value)}
-                  <button
-                    type="button"
-                    on:click={() => togglePaymentMethod(opt.value)}
-                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors
-                      {form.payment_method.includes(opt.value) ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-gray-50'}"
-                  >
-                    <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0
-                      {form.payment_method.includes(opt.value) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}">
-                      {#if form.payment_method.includes(opt.value)}
-                        <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                        </svg>
-                      {/if}
-                    </div>
-                    {opt.label}
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
+        {:else}
+          <!-- Single select — invoice belum lunas -->
+          <SearchableSelect
+            label="METODE PEMBAYARAN"
+            bind:value={singlePaymentMethod}
+            options={paymentMethodOptions}
+            placeholder="PILIH METODE"
+            on:change={() => { form.payment_method = singlePaymentMethod ? [singlePaymentMethod] : []; }}
+          />
+        {/if}
 
         <!-- STATUS (searchable) -->
         <SearchableSelect

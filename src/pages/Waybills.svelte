@@ -3,7 +3,7 @@
   import { invoices, loadInvoices } from '../stores/invoices.js';
   import { customers, loadCustomers } from '../stores/customers.js';
   import { selectedCompany } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
   import waybillService from '../services/waybill.service.js';
   import api from '../services/api.js';
   import * as XLSX from 'xlsx';
@@ -252,21 +252,30 @@
   }
 
   async function handleDelete(id) {
-    if (!confirm('Yakin ingin menghapus surat jalan ini?')) return;
+    const item = $waybills.find(w => w.id === id);
+    const name = item?.waybill_number || `#${id}`;
+    if (!await confirmDialog('Yakin ingin menghapus surat jalan ini?')) return;
     try {
       await deleteWaybill(id);
       selectedIds = selectedIds.filter(i => i !== id);
-      success('Surat jalan berhasil dihapus');
-    } catch {}
+      success(`"${name}" berhasil dihapus`);
+    } catch {
+      showError(`Gagal menghapus "${name}"`);
+    }
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} surat jalan terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteWaybill(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} surat jalan terpilih?`)) return;
+    const toDelete = $waybills.filter(w => selectedIds.includes(w.id));
+    const succeededIds = [], failedNames = [];
+    for (const w of toDelete) {
+      try { await deleteWaybill(w.id); succeededIds.push(w.id); }
+      catch { failedNames.push(w.waybill_number || `#${w.id}`); }
     }
-    selectedIds = [];
-    success('Surat jalan berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(w => succeededIds.includes(w.id)).map(w => w.waybill_number || `#${w.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
+    if (failedNames.length) showError(`Gagal dihapus: ${failedNames.join(', ')}`);
   }
 
   async function handleDownload(waybill) {

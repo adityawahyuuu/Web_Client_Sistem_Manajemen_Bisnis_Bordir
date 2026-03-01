@@ -8,7 +8,7 @@
   import { customers, loadCustomers, addCustomer } from '../stores/customers.js';
   import { items, itemsLoading, loadItems, createItem } from '../stores/items.js';
   import { selectedCompany } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
   import invoiceService from '../services/invoice.service.js';
   import * as XLSX from 'xlsx';
   import Modal from '../components/Modal.svelte';
@@ -88,20 +88,18 @@
   // ── Filter panel ───────────────────────────────────────────────
   let showFilterPanel = false;
   let filters = {
-    isDraft:  false,
     isUnpaid: false,
   };
 
   $: activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   $: filteredTableData = tableData.filter(inv => {
-    if (filters.isDraft  && inv.status !== 'draft')          return false;
-    if (filters.isUnpaid && inv.payment_status === 'lunas')  return false;
+    if (filters.isUnpaid && inv._payment_status === 'lunas')  return false;
     return true;
   });
 
   function clearFilters() {
-    filters = { isDraft: false, isUnpaid: false };
+    filters = { isUnpaid: false };
   }
 
   // ── Validation ─────────────────────────────────────────────────
@@ -158,7 +156,6 @@
     discount_amount: 0,
     shipping_cost: 0,
     notes: '',
-    status: 'draft'
   };
 
   const tableColumns = [
@@ -168,7 +165,7 @@
     { key: 'due_date',       label: 'Jatuh Tempo' },
     { key: '_total',         label: 'Total' },
     { key: 'total_paid',     label: 'Terbayar' },
-    { key: 'status',         label: 'Status', sortable: false },
+    { key: '_payment_status', label: 'Status', sortable: false },
   ];
 
   function discountPerUnit(item) {
@@ -178,13 +175,29 @@
   }
   $: subtotal = formItems.reduce((sum, i) => sum + num(i.quantity) * (num(i.unit_price) - discountPerUnit(i)), 0);
   $: totalAmount = subtotal - num(form.discount_amount) + num(form.shipping_cost) + num(form.tax_amount);
+  $: derivedPayStatus = totalAmount <= (editingInvoice?.total_paid || 0) ? 'lunas' : (editingInvoice?.total_paid || 0) > 0 ? 'dp' : 'belum_bayar';
 
-  $: tableData = $invoices.map(inv => ({
-    ...inv,
-    _customer_name: $customers.find(c => c.id === inv.customer_id)?.name || '-',
-    _total: inv.total_amount,
-    _status_text: `${inv.status} ${inv.payment_status}`,
-  }));
+  $: tableData = $invoices.map(inv => {
+    const itemsSubtotal = (inv.items || []).reduce((sum, i) => {
+      const discType = (i.discount_type || '').toLowerCase();
+      const discPerUnit = (discType === 'pct' || discType === 'persen')
+        ? num(i.unit_price) * num(i.discount_amount) / 100
+        : num(i.discount_amount);
+      return sum + num(i.quantity) * (num(i.unit_price) - discPerUnit);
+    }, 0);
+    const computedTotal = itemsSubtotal - num(inv.discount_amount) + num(inv.shipping_cost) + num(inv.tax_amount);
+    const computedPayStatus = computedTotal <= num(inv.total_paid)
+      ? 'lunas'
+      : num(inv.total_paid) > 0
+      ? 'dp'
+      : 'belum_bayar';
+    return {
+      ...inv,
+      _customer_name: $customers.find(c => c.id === inv.customer_id)?.name || '-',
+      _total: computedTotal,
+      _payment_status: computedPayStatus,
+    };
+  });
 
   $: emptyText = !$selectedCompany?.id
     ? 'Pilih perusahaan terlebih dahulu'
@@ -201,17 +214,7 @@
     }
   }
 
-  function getDocStatusBadge(status) {
-    const map = {
-      draft:     { label: 'Draft',      cls: 'bg-gray-100 text-gray-600' },
-      sent:      { label: 'Terkirim',   cls: 'bg-blue-100 text-blue-700' },
-      paid:      { label: 'Lunas',      cls: 'bg-green-100 text-green-700' },
-      cancelled: { label: 'Dibatalkan', cls: 'bg-red-100 text-red-600' }
-    };
-    return map[status] || { label: status || '-', cls: 'bg-gray-100 text-gray-600' };
-  }
-
-  function getPaymentStatusBadge(paymentStatus) {
+function getPaymentStatusBadge(paymentStatus) {
     const map = {
       lunas:       { label: 'Lunas',       cls: 'bg-green-500 text-white' },
       dp:          { label: 'DP',          cls: 'bg-yellow-500 text-white' },
@@ -313,7 +316,6 @@
         discount_amount: invoice.discount_amount || 0,
         shipping_cost:   invoice.shipping_cost || 0,
         notes:           invoice.notes || '',
-        status:          invoice.status || 'draft'
       };
       formItems = (invoice.items || []).length > 0
         ? invoice.items.map(i => ({
@@ -334,7 +336,7 @@
         invoice_date: new Date().toISOString().split('T')[0],
         due_date: '', po_number: '',
         tax_amount: 0, discount_amount: 0, shipping_cost: 0,
-        notes: '', status: 'draft'
+        notes: '',
       };
       formItems = [{ id: null, item_id: '', name: '', description: '', quantity: 1, unit_price: 0, unit: 'pcs', discount_amount: 0, discount_type: 'rp' }];
     }
@@ -386,19 +388,19 @@
     if (!(Number(paymentEntryForm.amount) > 0)) { showError('Jumlah pembayaran harus lebih dari 0'); return; }
     savingPayment = true;
     try {
-      await addInvoicePayment(editingInvoice.id, {
+      const refreshed = await addInvoicePayment(editingInvoice.id, {
         payment_date: paymentEntryForm.payment_date,
         amount: Number(paymentEntryForm.amount),
         payment_method: paymentEntryForm.payment_method,
         ...(paymentEntryForm.notes ? { notes: paymentEntryForm.notes } : {})
       });
+      if (refreshed) editingInvoice = refreshed;
       const result = await invoiceService.getPayments(editingInvoice.id);
       paymentsList = parsePaymentsList(result);
-      const fresh = $invoices.find(i => i.id === editingInvoice.id);
-      if (fresh) editingInvoice = fresh;
       showPaymentForm = false;
       paymentEntryForm = emptyPaymentForm();
       paymentAmountDisplay = '';
+      loadCustomers();
       success('Cicilan berhasil ditambahkan');
     } catch (err) {
       showError(err.message || 'Gagal menambah cicilan');
@@ -424,19 +426,19 @@
     if (!(Number(paymentEntryForm.amount) > 0)) { showError('Jumlah pembayaran harus lebih dari 0'); return; }
     savingPayment = true;
     try {
-      await updateInvoicePaymentEntry(editingInvoice.id, paymentId, {
+      const refreshed = await updateInvoicePaymentEntry(editingInvoice.id, paymentId, {
         payment_date: paymentEntryForm.payment_date,
         amount: Number(paymentEntryForm.amount),
         payment_method: paymentEntryForm.payment_method,
         ...(paymentEntryForm.notes ? { notes: paymentEntryForm.notes } : {})
       });
+      if (refreshed) editingInvoice = refreshed;
       const result = await invoiceService.getPayments(editingInvoice.id);
       paymentsList = parsePaymentsList(result);
-      const fresh = $invoices.find(i => i.id === editingInvoice.id);
-      if (fresh) editingInvoice = fresh;
       editingPaymentId = null;
       paymentEntryForm = emptyPaymentForm();
       paymentAmountDisplay = '';
+      loadCustomers();
       success('Cicilan berhasil diperbarui');
     } catch (err) {
       showError(err.message || 'Gagal memperbarui cicilan');
@@ -446,17 +448,19 @@
   }
 
   async function handleDeletePayment(paymentId) {
-    if (!confirm('Yakin ingin menghapus cicilan ini?')) return;
+    const p = paymentsList.find(x => x.id === paymentId);
+    const name = p ? `${p.payment_date} — ${formatCurrency(p.amount)}` : `#${paymentId}`;
+    if (!await confirmDialog('Yakin ingin menghapus cicilan ini?')) return;
     try {
-      await deleteInvoicePaymentEntry(editingInvoice.id, paymentId);
+      const refreshed = await deleteInvoicePaymentEntry(editingInvoice.id, paymentId);
+      if (refreshed) editingInvoice = refreshed;
       const result = await invoiceService.getPayments(editingInvoice.id);
       paymentsList = parsePaymentsList(result);
-      const fresh = $invoices.find(i => i.id === editingInvoice.id);
-      if (fresh) editingInvoice = fresh;
       if (editingPaymentId === paymentId) editingPaymentId = null;
-      success('Cicilan berhasil dihapus');
+      loadCustomers();
+      success(`Cicilan "${name}" berhasil dihapus`);
     } catch (err) {
-      showError(err.message || 'Gagal menghapus cicilan');
+      showError(`Gagal menghapus cicilan "${name}"`);
     }
   }
 
@@ -516,10 +520,6 @@
       }))
     };
 
-    if (editingInvoice) {
-      invoiceData.status = form.status;
-    }
-
     try {
       if (editingInvoice) {
         await updateInvoice(editingInvoice.id, invoiceData);
@@ -535,21 +535,27 @@
   }
 
   async function handleDelete(id) {
-    if (!confirm('Yakin ingin menghapus invoice ini? Akan gagal jika ada kuitansi atau surat jalan terhubung.')) return;
+    const item = $invoices.find(i => i.id === id);
+    const name = item?.invoice_number || `#${id}`;
+    if (!await confirmDialog('Yakin ingin menghapus invoice ini? Akan gagal jika ada kuitansi atau surat jalan terhubung.')) return;
     try {
       await deleteInvoice(id);
       selectedIds = selectedIds.filter(i => i !== id);
-      success('Invoice berhasil dihapus');
-    } catch {}
+      success(`"${name}" berhasil dihapus`);
+    } catch { /* error toast ditampilkan oleh service layer */ }
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} invoice terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteInvoice(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} invoice terpilih?`)) return;
+    const toDelete = $invoices.filter(i => selectedIds.includes(i.id));
+    const succeededIds = [], failedNames = [];
+    for (const inv of toDelete) {
+      try { await deleteInvoice(inv.id); succeededIds.push(inv.id); }
+      catch { /* error toast ditampilkan oleh service layer */ }
     }
-    selectedIds = [];
-    success('Invoice berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(i => succeededIds.includes(i.id)).map(i => i.invoice_number || `#${i.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
   }
 
   async function handleDownload(invoice) {
@@ -580,12 +586,11 @@
       'Total (Rp)':    Number(inv._total)    || 0,
       'Terbayar (Rp)': Number(inv.total_paid)|| 0,
       'Sisa (Rp)':     Math.max(0, (Number(inv._total) || 0) - (Number(inv.total_paid) || 0)),
-      'Status':        inv.status            || '',
-      'Pembayaran':    inv.payment_status    || '',
+      'Status Bayar':  inv._payment_status   || '',
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch:14 },{ wch:18 },{ wch:30 },{ wch:14 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:12 },{ wch:14 }];
+    ws['!cols'] = [{ wch:14 },{ wch:18 },{ wch:30 },{ wch:14 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
 
@@ -664,8 +669,7 @@
               </div>
               <div class="py-2">
                 {#each [
-                  { key: 'isDraft',  label: 'Hanya status Draft', desc: '' },
-                  { key: 'isUnpaid', label: 'Belum lunas',        desc: 'Pembayaran belum selesai' },
+                  { key: 'isUnpaid', label: 'Belum lunas', desc: 'Pembayaran belum selesai' },
                 ] as f}
                   <label class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
                     <input type="checkbox" bind:checked={filters[f.key]}
@@ -718,8 +722,7 @@
       emptyText={emptyText}
     >
       <svelte:fragment slot="row" let:row>
-        {@const docBadge = getDocStatusBadge(row.original.status)}
-        {@const payBadge = getPaymentStatusBadge(row.original.payment_status)}
+        {@const payBadge = getPaymentStatusBadge(row.original._payment_status)}
         <td class="px-4 py-3 text-sm text-gray-600">{formatDate(row.original.invoice_date)}</td>
         <td class="px-4 py-3">
           <button on:click={() => openModal(row.original)} class="text-sm font-semibold text-blue-600 hover:underline">
@@ -734,10 +737,7 @@
         <td class="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(row.original._total)}</td>
         <td class="px-4 py-3 text-sm text-gray-600">{formatCurrency(row.original.total_paid)}</td>
         <td class="px-4 py-3">
-          <div class="flex flex-col gap-1">
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {payBadge.cls}">{payBadge.label}</span>
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {docBadge.cls}">{docBadge.label}</span>
-          </div>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {payBadge.cls}">{payBadge.label}</span>
         </td>
       </svelte:fragment>
     </DataTable>
@@ -810,26 +810,6 @@
             class="w-full bg-transparent text-sm text-gray-800 focus:outline-none" />
         </div>
       </div>
-
-      <!-- Status (hanya saat edit) -->
-      {#if editingInvoice}
-        <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
-          <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">STATUS DOKUMEN</label>
-          <div class="flex items-center gap-3">
-            <select bind:value={form.status} class="bg-transparent text-sm text-gray-800 focus:outline-none w-48">
-              <option value="draft">Draft</option>
-              <option value="sent">Terkirim</option>
-              <option value="paid">Lunas</option>
-              <option value="cancelled">Dibatalkan</option>
-            </select>
-            {#if editingInvoice.status === 'cancelled'}
-              <span class="text-xs text-red-500">Invoice dibatalkan tidak dapat diubah</span>
-            {:else if editingInvoice.status === 'paid'}
-              <span class="text-xs text-gray-400">Invoice lunas hanya bisa diubah ke Dibatalkan</span>
-            {/if}
-          </div>
-        </div>
-      {/if}
 
       <!-- Daftar Item -->
       <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-3">
@@ -1000,8 +980,7 @@
           </button>
           <button
             type="submit"
-            disabled={editingInvoice?.status === 'cancelled'}
-            class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0"/>
@@ -1021,7 +1000,7 @@
       <div class="grid grid-cols-4 gap-3">
         <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
           <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-0.5">TOTAL INVOICE</label>
-          <p class="text-sm font-semibold text-gray-900">{formatCurrency(editingInvoice.total_amount)}</p>
+          <p class="text-sm font-semibold text-gray-900">{formatCurrency(totalAmount)}</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
           <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-0.5">TERBAYAR</label>
@@ -1040,8 +1019,8 @@
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
           <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-0.5">STATUS</label>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {getPaymentStatusBadge(editingInvoice.payment_status).cls}">
-            {getPaymentStatusBadge(editingInvoice.payment_status).label}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {getPaymentStatusBadge(derivedPayStatus).cls}">
+            {getPaymentStatusBadge(derivedPayStatus).label}
           </span>
         </div>
       </div>
@@ -1073,16 +1052,17 @@
                     <input type="text" inputmode="numeric" value={paymentAmountDisplay} on:input={handlePaymentAmountInput} placeholder="0"
                       class="w-full bg-transparent text-sm text-gray-800 focus:outline-none" />
                   </div>
-                  <div class="rounded-lg border border-gray-200 bg-white px-3 pt-2 pb-2">
-                    <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">METODE</label>
-                    <select bind:value={paymentEntryForm.payment_method}
-                      class="w-full bg-transparent text-sm text-gray-800 focus:outline-none">
-                      <option value="cash">Tunai</option>
-                      <option value="transfer">Transfer</option>
-                      <option value="check">Cek</option>
-                      <option value="other">Lainnya</option>
-                    </select>
-                  </div>
+                  <SearchableSelect
+                    label="METODE"
+                    bind:value={paymentEntryForm.payment_method}
+                    options={[
+                      { value: 'cash',     label: 'Tunai' },
+                      { value: 'transfer', label: 'Transfer' },
+                      { value: 'check',    label: 'Cek' },
+                      { value: 'other',    label: 'Lainnya' },
+                    ]}
+                    placeholder="PILIH METODE"
+                  />
                   <div class="rounded-lg border border-gray-200 bg-white px-3 pt-2 pb-2">
                     <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">CATATAN</label>
                     <input type="text" bind:value={paymentEntryForm.notes} placeholder="OPSIONAL"
@@ -1152,16 +1132,17 @@
               <input type="text" inputmode="numeric" value={paymentAmountDisplay} on:input={handlePaymentAmountInput} placeholder="0"
                 class="w-full bg-transparent text-sm text-gray-800 focus:outline-none" />
             </div>
-            <div class="rounded-lg border border-gray-200 bg-white px-3 pt-2 pb-2">
-              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">METODE PEMBAYARAN</label>
-              <select bind:value={paymentEntryForm.payment_method}
-                class="w-full bg-transparent text-sm text-gray-800 focus:outline-none">
-                <option value="cash">Tunai</option>
-                <option value="transfer">Transfer</option>
-                <option value="check">Cek</option>
-                <option value="other">Lainnya</option>
-              </select>
-            </div>
+            <SearchableSelect
+              label="METODE PEMBAYARAN"
+              bind:value={paymentEntryForm.payment_method}
+              options={[
+                { value: 'cash',     label: 'Tunai' },
+                { value: 'transfer', label: 'Transfer' },
+                { value: 'check',    label: 'Cek' },
+                { value: 'other',    label: 'Lainnya' },
+              ]}
+              placeholder="PILIH METODE"
+            />
             <div class="rounded-lg border border-gray-200 bg-white px-3 pt-2 pb-2">
               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">CATATAN</label>
               <input type="text" bind:value={paymentEntryForm.notes} placeholder="OPSIONAL"

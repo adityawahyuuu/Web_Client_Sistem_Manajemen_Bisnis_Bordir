@@ -1,7 +1,7 @@
 <script>
   import { items, itemsLoading, loadItems, createItem, updateItem, deleteItem } from '../stores/items.js';
   import { selectedCompany } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
   import * as XLSX from 'xlsx';
   import Modal from '../components/Modal.svelte';
   import CompanySelector from '../components/CompanySelector.svelte';
@@ -148,12 +148,17 @@
 
   // ── Bulk delete ────────────────────────────────────────────────
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} item terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteItem(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} item terpilih?`)) return;
+    const toDelete = $items.filter(i => selectedIds.includes(i.id));
+    const succeededIds = [], failedNames = [];
+    for (const item of toDelete) {
+      try { await deleteItem(item.id); succeededIds.push(item.id); }
+      catch { failedNames.push(item.name || `#${item.id}`); }
     }
-    selectedIds = [];
-    success('Item berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(i => succeededIds.includes(i.id)).map(i => i.name || `#${i.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
+    if (failedNames.length) showError(`Gagal dihapus: ${failedNames.join(', ')}`);
   }
 
   // ── Export ─────────────────────────────────────────────────────

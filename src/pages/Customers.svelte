@@ -1,8 +1,9 @@
 <script>
   import { customers, customersLoading, loadCustomers, addCustomer, updateCustomer, deleteCustomer } from '../stores/customers.js';
+  import { invoices, loadInvoices, decimalToNumber } from '../stores/invoices.js';
   import { items, loadItems } from '../stores/items.js';
   import { selectedCompany } from '../stores/company.js';
-  import { success, error as showError } from '../stores/notifications.js';
+  import { success, error as showError, confirmDialog } from '../stores/notifications.js';
   import { itemService } from '../services/item.service.js';
   import api from '../services/api.js';
   import * as XLSX from 'xlsx';
@@ -10,6 +11,8 @@
   import CompanySelector from '../components/CompanySelector.svelte';
   import DataTable from '../components/DataTable.svelte';
   import SearchableSelect from '../components/SearchableSelect.svelte';
+
+  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
 
   // ── Country codes ──────────────────────────────────────────────
   const countryCodes = [
@@ -41,7 +44,35 @@
 
   $: activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  $: filteredCustomers = $customers.filter(c => {
+  // Hitung piutang per pelanggan dari data invoice (termasuk diskon item)
+  $: customerPiutangMap = (() => {
+    const map = new Map();
+    for (const inv of $invoices) {
+      const itemsSubtotal = (inv.items || []).reduce((sum, i) => {
+        const discType = (i.discount_type || '').toLowerCase();
+        const discPerUnit = (discType === 'pct' || discType === 'persen')
+          ? num(i.unit_price) * num(i.discount_amount) / 100
+          : num(i.discount_amount);
+        return sum + num(i.quantity) * (num(i.unit_price) - discPerUnit);
+      }, 0);
+      const computedTotal = itemsSubtotal - num(inv.discount_amount) + num(inv.shipping_cost) + num(inv.tax_amount);
+      const sisa    = Math.max(0, computedTotal - num(inv.total_paid));
+      const overpay = Math.max(0, num(inv.total_paid) - computedTotal);
+      if (!map.has(inv.customer_id)) map.set(inv.customer_id, { piutang: 0, overpay: 0 });
+      const entry = map.get(inv.customer_id);
+      entry.piutang += sisa;
+      entry.overpay += overpay;
+    }
+    return map;
+  })();
+
+  // Timpa piutang & overpay dari backend dengan nilai yang sudah terkoreksi
+  $: customersEnriched = $customers.map(c => {
+    const p = customerPiutangMap.get(c.id);
+    return { ...c, piutang: p?.piutang ?? 0, overpay: p?.overpay ?? 0 };
+  });
+
+  $: filteredCustomers = customersEnriched.filter(c => {
     if (filters.hasPiutang     && !(Number(c.piutang) > 0)) return false;
     if (filters.hasEmail       && !c.email)                  return false;
     if (filters.hasMobilePhone && !c.mobile_phone)           return false;
@@ -142,7 +173,7 @@
     if (cid !== _loadedCompanyId) {
       _loadedCompanyId = cid;
       selectedIds = [];
-      if (cid) { loadCustomers(); loadItems(); }
+      if (cid) { loadCustomers(); loadItems(); loadInvoices(); }
     }
   }
 
@@ -375,23 +406,30 @@
   }
 
   async function handleDeleteCustomerItem(customerItemId) {
-    if (!confirm('Hapus harga khusus item ini?')) return;
+    const ci = customerItems.find(x => x.id === customerItemId);
+    const name = ci?.item_name || getItemName(ci?.item_id) || `#${customerItemId}`;
+    if (!await confirmDialog('Hapus harga khusus item ini?')) return;
     try {
       await itemService.deleteCustomerItem(editingCustomer.id, customerItemId);
-      customerItems = customerItems.filter(ci => ci.id !== customerItemId);
-      success('Harga khusus item berhasil dihapus');
+      customerItems = customerItems.filter(x => x.id !== customerItemId);
+      success(`Harga khusus "${name}" berhasil dihapus`);
     } catch (err) {
-      showError(err.message || 'Gagal menghapus harga khusus');
+      showError(`Gagal menghapus harga khusus "${name}"`);
     }
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Hapus ${selectedIds.length} pelanggan terpilih?`)) return;
-    for (const id of [...selectedIds]) {
-      try { await deleteCustomer(id); } catch {}
+    if (!await confirmDialog(`Hapus ${selectedIds.length} pelanggan terpilih?`)) return;
+    const toDelete = $customers.filter(c => selectedIds.includes(c.id));
+    const succeededIds = [], failedNames = [];
+    for (const c of toDelete) {
+      try { await deleteCustomer(c.id); succeededIds.push(c.id); }
+      catch { failedNames.push(c.name || `#${c.id}`); }
     }
-    selectedIds = [];
-    success('Pelanggan berhasil dihapus');
+    selectedIds = selectedIds.filter(id => !succeededIds.includes(id));
+    const succeededNames = toDelete.filter(c => succeededIds.includes(c.id)).map(c => c.name || `#${c.id}`);
+    if (succeededNames.length) success(`Berhasil dihapus: ${succeededNames.join(', ')}`);
+    if (failedNames.length) showError(`Gagal dihapus: ${failedNames.join(', ')}`);
   }
 
   function formatCurrency(value) {

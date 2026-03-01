@@ -5,6 +5,7 @@
   import { loadCompanies } from './stores/company.js';
   import Sidebar from './components/Sidebar.svelte';
   import Notification from './components/Notification.svelte';
+  import ConfirmDialog from './components/ConfirmDialog.svelte';
   import LazyRoute from './components/LazyRoute.svelte';
 
   // Lazy load pages - Authentication
@@ -52,6 +53,7 @@
 </script>
 
 <Notification />
+<ConfirmDialog />
 
 <Router>
   {#if $authInitializing}

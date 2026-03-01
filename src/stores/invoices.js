@@ -185,18 +185,16 @@ async function refreshInvoice(invoiceId) {
  * Tambah cicilan pembayaran
  */
 export async function addInvoicePayment(invoiceId, data) {
-  const result = await invoiceService.addPayment(invoiceId, data);
-  await refreshInvoice(invoiceId);
-  return result;
+  await invoiceService.addPayment(invoiceId, data);
+  return await refreshInvoice(invoiceId);
 }
 
 /**
  * Edit cicilan pembayaran
  */
 export async function updateInvoicePaymentEntry(invoiceId, paymentId, data) {
-  const result = await invoiceService.updatePayment(invoiceId, paymentId, data);
-  await refreshInvoice(invoiceId);
-  return result;
+  await invoiceService.updatePayment(invoiceId, paymentId, data);
+  return await refreshInvoice(invoiceId);
 }
 
 /**
@@ -204,7 +202,7 @@ export async function updateInvoicePaymentEntry(invoiceId, paymentId, data) {
  */
 export async function deleteInvoicePaymentEntry(invoiceId, paymentId) {
   await invoiceService.deletePayment(invoiceId, paymentId);
-  await refreshInvoice(invoiceId);
+  return await refreshInvoice(invoiceId);
 }
 
 /**
