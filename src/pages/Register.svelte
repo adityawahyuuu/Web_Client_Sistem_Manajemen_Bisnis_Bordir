@@ -47,9 +47,9 @@
 
     <!-- Header -->
     <div class="text-center mb-8">
-      <img src={logo} alt="Nama Aplikasi" class="w-16 h-16 object-contain mx-auto mb-3" />
-      <h1 class="text-xl font-bold text-gray-900">Nama Aplikasi</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Deskripsi singkat aplikasi</p>
+      <img src={logo} alt="Patchwork" class="w-16 h-16 object-contain mx-auto mb-3" />
+      <h1 class="text-xl font-bold text-gray-900">Patchwork</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Patchwork Invoice Management</p>
     </div>
 
     <!-- Card -->
@@ -93,16 +93,18 @@
                 type="text"
                 bind:value={password}
                 autocomplete="new-password"
+                placeholder="Minimal 8 karakter"
                 disabled={loading}
-                class="input-class"
+                class="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300"
               />
             {:else}
               <input
                 type="password"
                 bind:value={password}
                 autocomplete="new-password"
+                placeholder="Minimal 8 karakter"
                 disabled={loading}
-                class="input-class"
+                class="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300"
               />
             {/if}
             <button

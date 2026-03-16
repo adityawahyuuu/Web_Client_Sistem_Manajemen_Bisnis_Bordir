@@ -26,11 +26,11 @@
 
 {#if show}
   <div class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="flex items-center justify-center min-h-screen p-4">
+    <div class="flex items-end sm:items-center justify-center min-h-screen p-0 sm:p-4">
       <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" on:click={close}></div>
 
       <div
-        class="relative bg-white rounded-lg shadow-xl w-full {sizeClasses[size]} {shake ? 'modal-shake' : ''}"
+        class="relative bg-white rounded-none sm:rounded-lg shadow-xl w-full {sizeClasses[size]} max-h-screen sm:max-h-[90vh] overflow-y-auto {shake ? 'modal-shake' : ''}"
         on:animationend={onAnimationEnd}
       >
         <div class="flex items-center justify-between p-4 border-b border-gray-200">

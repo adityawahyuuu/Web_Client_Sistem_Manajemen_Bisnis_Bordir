@@ -5,6 +5,7 @@
   import { loadCompanies } from './stores/company.js';
   import Sidebar from './components/Sidebar.svelte';
   import Notification from './components/Notification.svelte';
+  import { sidebarOpen, sidebarCollapsed } from './stores/ui.js';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
   import LazyRoute from './components/LazyRoute.svelte';
 
@@ -66,7 +67,7 @@
   {:else if $isAuthenticated}
     <div class="flex h-screen overflow-hidden bg-gray-100">
       <Sidebar />
-      <main class="flex-1 overflow-y-auto">
+      <main class="flex-1 min-w-0 overflow-y-auto transition-all duration-300">
         <LazyRoute path="/" component={Dashboard} />
         <LazyRoute path="/customers" component={Customers} />
         <LazyRoute path="/items" component={Items} />

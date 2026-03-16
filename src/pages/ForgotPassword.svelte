@@ -30,8 +30,8 @@
 <div class="min-h-screen bg-gray-100 flex items-center justify-center p-4">
   <div class="card w-full max-w-md">
     <div class="text-center mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Nama Aplikasi</h1>
-      <p class="text-gray-500">Deskripsi singkat aplikasi</p>
+      <h1 class="text-2xl font-bold text-gray-900">Patchwork</h1>
+      <p class="text-gray-500">Patchwork Invoice Management</p>
     </div>
 
     {#if !emailSent}

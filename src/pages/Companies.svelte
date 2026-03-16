@@ -17,6 +17,7 @@
   import Modal from '../components/Modal.svelte';
   import DataTable from '../components/DataTable.svelte';
   import SearchableSelect from '../components/SearchableSelect.svelte';
+  import { sidebarOpen } from '../stores/ui.js';
 
   // ── Country codes ──────────────────────────────────────────────
   const countryCodes = [
@@ -309,7 +310,15 @@
 
 <div>
   <!-- Sticky top bar -->
-  <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+  <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-4">
+    <button
+      class="lg:hidden p-2 -ml-1 text-gray-500 hover:text-gray-700 flex-shrink-0"
+      on:click={() => sidebarOpen.update(v => !v)}
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
     <div class="relative flex-1 max-w-sm">
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0" />
@@ -324,13 +333,13 @@
   </div>
 
   <!-- Content -->
-  <div class="p-6">
-    <div class="flex items-start justify-between mb-5">
+  <div class="p-4 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
       <div>
         <h1 class="text-xl font-semibold text-gray-900">Perusahaan</h1>
         <p class="text-sm text-gray-500 mt-0.5">Kelola daftar perusahaan Anda</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center flex-wrap gap-2">
         {#if selectedIds.length > 0}
           <button on:click={handleBulkDelete}
             class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-red-50 text-red-600 transition-colors">
@@ -362,7 +371,7 @@
           </button>
           {#if showFilterPanel}
             <div class="fixed inset-0 z-10" on:click={() => showFilterPanel = false}></div>
-            <div class="absolute right-0 top-full mt-1 z-20 w-60 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+            <div class="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-20 w-56 sm:w-60 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
               <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Filter Perusahaan</span>
                 {#if activeFilterCount > 0}
@@ -397,20 +406,22 @@
         <!-- Export -->
         <button on:click={handleExport}
           disabled={!filteredData.length}
+          title="Ekspor"
           class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Ekspor
+          <span class="hidden sm:inline">Ekspor</span>
         </button>
 
         <button on:click={() => openModal()}
-          class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          + Tambah Perusahaan
+          class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+          + <span class="hidden sm:inline">Tambah </span>Perusahaan
         </button>
       </div>
     </div>
 
+    <div class="overflow-x-auto -mx-4 sm:mx-0">
     <DataTable
       data={filteredData}
       columns={tableColumns}
@@ -462,6 +473,7 @@
         </td>
       </svelte:fragment>
     </DataTable>
+    </div>
   </div>
 </div>
 
@@ -540,7 +552,7 @@
     </div>
 
     <!-- Provinsi / Kota / Kode Pos -->
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <SearchableSelect
         label="PROVINSI"
         bind:value={form.province}
@@ -565,7 +577,7 @@
     </div>
 
     <!-- Telepon / Email -->
-    <div class="grid grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <!-- TELEPON dengan country code picker -->
       <div>
         <div class="flex gap-2">
@@ -670,7 +682,7 @@
         </div>
       {:else}
         <!-- Prefix & Format Nomor Invoice -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
             <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">PREFIX INVOICE</label>
             <input type="text" bind:value={settings.invoice_prefix} placeholder="contoh: AAJ"
@@ -686,7 +698,7 @@
         </div>
 
         <!-- Header & Footer -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
             <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">HEADER DOKUMEN</label>
             <textarea bind:value={settings.header_text} rows="3" placeholder="Teks header pada dokumen cetak"

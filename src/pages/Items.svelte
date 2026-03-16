@@ -7,6 +7,7 @@
   import CompanySelector from '../components/CompanySelector.svelte';
   import DataTable from '../components/DataTable.svelte';
   import SearchableSelect from '../components/SearchableSelect.svelte';
+  import { sidebarOpen } from '../stores/ui.js';
 
   // ── Page state ─────────────────────────────────────────────────
   let searchTerm = '';
@@ -198,7 +199,15 @@
 
 <div>
   <!-- Bilah atas -->
-  <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+  <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-4">
+    <button
+      class="lg:hidden p-2 -ml-1 text-gray-500 hover:text-gray-700 flex-shrink-0"
+      on:click={() => sidebarOpen.update(v => !v)}
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
     <div class="relative flex-1 max-w-sm">
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0" />
@@ -216,15 +225,15 @@
   </div>
 
   <!-- Konten -->
-  <div class="p-6">
-    <div class="flex items-start justify-between mb-5">
+  <div class="p-4 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
       <div>
         <h1 class="text-xl font-semibold text-gray-900">Item</h1>
         <p class="text-sm text-gray-500 mt-0.5">
           Menampilkan data item{$selectedCompany ? ` ${$selectedCompany.name}` : ''}
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         {#if selectedIds.length > 0}
           <button
             on:click={handleBulkDelete}
@@ -259,7 +268,7 @@
 
           {#if showFilterPanel}
             <div class="fixed inset-0 z-10" on:click={() => showFilterPanel = false}></div>
-            <div class="absolute right-0 top-full mt-1 z-20 w-60 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+            <div class="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-20 w-56 sm:w-60 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
               <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Filter Item</span>
                 {#if activeFilterCount > 0}
@@ -296,17 +305,18 @@
           on:click={handleExport}
           disabled={!$selectedCompany?.id || !filteredItems.length}
           class="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Ekspor"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Ekspor
+          <span class="hidden sm:inline">Ekspor</span>
         </button>
 
         <button
           on:click={() => openModal()}
           disabled={!$selectedCompany?.id}
-          class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 whitespace-nowrap"
         >
           + Tambah Item
         </button>
@@ -387,7 +397,7 @@
       </div>
 
       <!-- KATEGORI & SATUAN -->
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 pt-2 pb-2">
           <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">KATEGORI</label>
           <input

@@ -2,6 +2,7 @@
   import { link, useLocation } from 'svelte-routing';
   import { user, logout } from '../stores/auth.js';
   import { selectedCompany, clearCompanyState } from '../stores/company.js';
+  import { sidebarOpen, sidebarCollapsed } from '../stores/ui.js';
   import logoUrl from '../assets/logo.png';
 
   const location = useLocation();
@@ -57,25 +58,66 @@
     logout();
   }
 
+  function closeSidebar() {
+    sidebarOpen.set(false);
+  }
+
+  function toggleCollapse() {
+    sidebarCollapsed.update(v => !v);
+  }
+
   function getInitials(name) {
     if (!name) return 'U';
     return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   }
 </script>
 
-<aside class="w-64 bg-gray-900 h-screen flex flex-col flex-shrink-0 overflow-y-auto">
+<!-- Mobile overlay backdrop -->
+{#if $sidebarOpen}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" on:click={closeSidebar}></div>
+{/if}
+
+<aside class="
+  fixed lg:static inset-y-0 left-0 z-30
+  {$sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'} w-64
+  bg-gray-900 h-screen flex flex-col flex-shrink-0 overflow-y-auto overflow-x-hidden
+  transition-all duration-300 ease-in-out
+  {$sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+">
   <!-- Logo area -->
-  <div class="h-20 flex items-center justify-center border-b border-gray-700 px-4 flex-shrink-0">
-    <img src={logoUrl} alt="Logo" class="h-14 w-auto object-contain" />
+  <div class="h-16 flex items-center justify-between border-b border-gray-700 px-4 flex-shrink-0">
+    <!-- Logo: hidden on desktop when collapsed -->
+    <img
+      src={logoUrl}
+      alt="Logo"
+      class="h-10 w-auto object-contain {$sidebarCollapsed ? 'lg:hidden' : ''}"
+    />
+    <!-- Desktop collapse toggle -->
+    <button
+      on:click={toggleCollapse}
+      class="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 transition-colors flex-shrink-0
+        {$sidebarCollapsed ? 'mx-auto' : 'ml-auto'}"
+      title={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    >
+      <svg class="w-4 h-4 transition-transform duration-300 {$sidebarCollapsed ? 'rotate-180' : ''}"
+        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Navigation -->
-  <nav class="flex-1 px-3 py-4 space-y-0.5">
+  <nav class="flex-1 px-2 py-4 space-y-0.5">
     {#each mainMenuItems as item}
       <a
         href={item.path}
         use:link
-        class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm
+        on:click={closeSidebar}
+        title={$sidebarCollapsed ? item.label : ''}
+        class="flex items-center gap-3 rounded-lg transition-colors text-sm
+          {$sidebarCollapsed ? 'lg:justify-center lg:px-0 px-3 py-2.5' : 'px-3 py-2.5'}
           {isActive(item.path, $location.pathname)
             ? 'bg-gray-800 text-white font-medium'
             : 'text-gray-400 hover:text-white hover:bg-gray-800'}"
@@ -83,18 +125,21 @@
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
         </svg>
-        {item.label}
+        <span class="{$sidebarCollapsed ? 'lg:hidden' : ''}">{item.label}</span>
       </a>
     {/each}
   </nav>
 
   <!-- Bottom nav + User -->
-  <div class="border-t border-gray-700 px-3 py-4 space-y-0.5 flex-shrink-0">
+  <div class="border-t border-gray-700 px-2 py-4 space-y-0.5 flex-shrink-0">
     {#each bottomMenuItems as item}
       <a
         href={item.path}
         use:link
-        class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm
+        on:click={closeSidebar}
+        title={$sidebarCollapsed ? item.label : ''}
+        class="flex items-center gap-3 rounded-lg transition-colors text-sm
+          {$sidebarCollapsed ? 'lg:justify-center lg:px-0 px-3 py-2.5' : 'px-3 py-2.5'}
           {isActive(item.path, $location.pathname)
             ? 'bg-gray-800 text-white font-medium'
             : 'text-gray-400 hover:text-white hover:bg-gray-800'}"
@@ -102,27 +147,31 @@
         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
         </svg>
-        {item.label}
+        <span class="{$sidebarCollapsed ? 'lg:hidden' : ''}">{item.label}</span>
       </a>
     {/each}
 
     <button
       on:click={handleLogout}
-      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm text-gray-400 hover:text-white hover:bg-gray-800"
+      title={$sidebarCollapsed ? 'Logout' : ''}
+      class="w-full flex items-center gap-3 rounded-lg transition-colors text-sm text-gray-400 hover:text-white hover:bg-gray-800
+        {$sidebarCollapsed ? 'lg:justify-center lg:px-0 px-3 py-2.5' : 'px-3 py-2.5'}"
     >
       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
       </svg>
-      Logout
+      <span class="{$sidebarCollapsed ? 'lg:hidden' : ''}">Logout</span>
     </button>
 
     <!-- User info -->
-    <div class="flex items-center gap-3 px-3 pt-3 mt-2 border-t border-gray-700">
-      <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+    <div class="flex items-center gap-3 px-1 pt-3 mt-2 border-t border-gray-700
+      {$sidebarCollapsed ? 'lg:justify-center' : ''}">
+      <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0"
+        title={$sidebarCollapsed ? ($user?.fullName || 'User') : ''}>
         <span class="text-white text-xs font-semibold">{getInitials($user?.fullName)}</span>
       </div>
-      <div class="min-w-0">
+      <div class="min-w-0 {$sidebarCollapsed ? 'lg:hidden' : ''}">
         <p class="text-sm text-white font-medium truncate">{$user?.fullName || 'User'}</p>
         <p class="text-xs text-gray-400 truncate">{$user?.email || ''}</p>
       </div>
@@ -130,7 +179,7 @@
   </div>
 
   <!-- App name -->
-  <div class="bg-black px-4 py-2 text-center flex-shrink-0">
-    <span class="text-gray-500 text-xs">Deskripsi singkat aplikasi</span>
+  <div class="bg-black px-4 py-2 text-center flex-shrink-0 {$sidebarCollapsed ? 'lg:hidden' : ''}">
+    <span class="text-gray-500 text-xs">Patchwork Invoice Management</span>
   </div>
 </aside>

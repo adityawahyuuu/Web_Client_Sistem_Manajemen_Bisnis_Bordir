@@ -1,9 +1,10 @@
 import tokenStorage from './tokenStorage.js';
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASEURI || 'http://localhost:3000';
 
 class ApiService {
   constructor() {
-    this.baseUrl = window.location.origin + API_PREFIX;
+    this.baseUrl = API_BASE_URL + API_PREFIX;
     this._refreshPromise = null;
   }
 
