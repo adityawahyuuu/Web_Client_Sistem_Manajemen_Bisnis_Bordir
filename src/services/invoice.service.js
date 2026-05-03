@@ -3,10 +3,80 @@ import { get } from 'svelte/store';
 import { selectedCompany } from '../stores/company.js';
 import { error as errorNotify } from '../stores/notifications.js';
 
+/**
+ * Helper to get error message from unknown error
+ * @param {unknown} err - Error object
+ * @returns {string} Error message
+ */
+function getErrorMessage(err) {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'Terjadi kesalahan';
+}
+
+/**
+ * @typedef {Object} Company
+ * @property {number} id - Company ID
+ */
+
+/**
+ * Helper to safely get company with id property
+ * @returns {Company|null}
+ */
+function getSelectedCompany() {
+  return (get(selectedCompany));
+}
+
+/**
+ * @typedef {Object} GetAllParams
+ * @property {number} [page]
+ * @property {number} [limit]
+ * @property {string} [status]
+ * @property {string} [customer_id]
+ * @property {string} [search]
+ * @property {string} [date_from]
+ * @property {string} [date_to]
+ * @property {string} [payment_status]
+ */
+
+/**
+ * @typedef {Object} CreateInvoiceParams
+ * @property {number} customer_id
+ * @property {string} [invoice_date]
+ * @property {string} [due_date]
+ * @property {string} [po_number]
+ * @property {number} [tax_amount]
+ * @property {number} [discount_amount]
+ * @property {number} [shipping_cost]
+ * @property {string} [notes]
+ * @property {Array<any>} items
+ */
+
+/**
+ * @typedef {Object} UpdateInvoiceParams
+ * @property {string} [due_date]
+ * @property {string} [po_number]
+ * @property {number} [tax_amount]
+ * @property {number} [discount_amount]
+ * @property {number} [shipping_cost]
+ * @property {string} [notes]
+ * @property {string} [status]
+ * @property {Array<any>} [items]
+ */
+
+/**
+ * @typedef {Object} PaymentParams
+ * @property {string} payment_date
+ * @property {number} amount
+ * @property {string} payment_method
+ * @property {string} [notes]
+ */
+
 export const invoiceService = {
   /**
    * Ambil daftar invoice dengan filter
-   * @param {{ page?, limit?, status?, customer_id?, search?, date_from?, date_to?, payment_status? }} params
+   * @param {GetAllParams} [params]
+   * @returns {Promise<{data: Array<any>, meta: Object}|null>}
    */
   async getAll({
     page = 1,
@@ -19,7 +89,7 @@ export const invoiceService = {
     payment_status = ''
   } = {}) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -39,7 +109,7 @@ export const invoiceService = {
         meta: response.meta || { page, limit, total: 0, totalPages: 0 }
       };
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat data invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal memuat data invoice');
       return null;
     }
   },
@@ -47,10 +117,11 @@ export const invoiceService = {
   /**
    * Ambil detail invoice (termasuk invoice_items, customers, receipts, total_paid, payment_status)
    * @param {number} id
+   * @returns {Promise<any>}
    */
   async getById(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -59,18 +130,19 @@ export const invoiceService = {
       const response = await api.get(`/invoices/${company.id}/${id}`);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat detail invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal memuat detail invoice');
       return null;
     }
   },
 
   /**
    * Buat invoice baru (status otomatis draft)
-   * @param {{ customer_id: number, invoice_date?: string, due_date?: string, po_number?: string, tax_amount?: number, discount_amount?: number, shipping_cost?: number, notes?: string, items: Array }} data
+   * @param {CreateInvoiceParams} data
+   * @returns {Promise<any>}
    */
   async create(data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -86,7 +158,7 @@ export const invoiceService = {
         discount_amount: data.discount_amount ?? 0,
         shipping_cost: data.shipping_cost ?? 0,
         notes: data.notes || '',
-        items: data.items.map(item => ({
+        items: data.items.map((item) => ({
           item_id: item.item_id,
           name: item.name || item.item_name || '',
           description: item.description || '',
@@ -101,7 +173,7 @@ export const invoiceService = {
       const response = await api.post(`/invoices/${company.id}`, apiData);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal membuat invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal membuat invoice');
       throw err;
     }
   },
@@ -109,11 +181,12 @@ export const invoiceService = {
   /**
    * Perbarui invoice
    * @param {number} id
-   * @param {{ due_date?, po_number?, tax_amount?, discount_amount?, shipping_cost?, notes?, status?, items? }} data
+   * @param {UpdateInvoiceParams} data
+   * @returns {Promise<any>}
    */
   async update(id, data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -128,7 +201,7 @@ export const invoiceService = {
         notes: data.notes,
         status: data.status || undefined,
         ...(data.items ? {
-          items: data.items.map(item => ({
+          items: data.items.map((item) => ({
             item_id: item.item_id,
             name: item.name || item.item_name || '',
             description: item.description || '',
@@ -144,7 +217,7 @@ export const invoiceService = {
       const response = await api.put(`/invoices/${company.id}/${id}`, apiData);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memperbarui invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal memperbarui invoice');
       throw err;
     }
   },
@@ -153,10 +226,11 @@ export const invoiceService = {
    * Ubah status invoice saja
    * @param {number} id
    * @param {'draft'|'sent'|'paid'|'cancelled'} status
+   * @returns {Promise<any>}
    */
   async patchStatus(id, status) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -165,7 +239,7 @@ export const invoiceService = {
       const response = await api.patch(`/invoices/${company.id}/${id}/status`, { status });
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal mengubah status invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal mengubah status invoice');
       throw err;
     }
   },
@@ -173,10 +247,11 @@ export const invoiceService = {
   /**
    * Ambil riwayat pembayaran (kuitansi) untuk invoice
    * @param {number} id
+   * @returns {Promise<any>}
    */
   async getPayments(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -185,7 +260,7 @@ export const invoiceService = {
       const response = await api.get(`/invoices/${company.id}/${id}/payments`);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat riwayat pembayaran');
+      errorNotify(getErrorMessage(err) || 'Gagal memuat riwayat pembayaran');
       return null;
     }
   },
@@ -193,11 +268,12 @@ export const invoiceService = {
   /**
    * Tambah cicilan pembayaran baru
    * @param {number} invoiceId
-   * @param {{ payment_date: string, amount: number, payment_method: string, notes?: string }} data
+   * @param {PaymentParams} data
+   * @returns {Promise<any>}
    */
   async addPayment(invoiceId, data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -205,7 +281,7 @@ export const invoiceService = {
       const response = await api.post(`/invoices/${company.id}/${invoiceId}/payments`, data);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal menambah cicilan pembayaran');
+      errorNotify(getErrorMessage(err) || 'Gagal menambah cicilan pembayaran');
       throw err;
     }
   },
@@ -214,11 +290,12 @@ export const invoiceService = {
    * Edit cicilan pembayaran
    * @param {number} invoiceId
    * @param {number} paymentId
-   * @param {{ payment_date?: string, amount?: number, payment_method?: string, notes?: string }} data
+   * @param {PaymentParams} data
+   * @returns {Promise<any>}
    */
   async updatePayment(invoiceId, paymentId, data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -226,7 +303,7 @@ export const invoiceService = {
       const response = await api.put(`/invoices/${company.id}/${invoiceId}/payments/${paymentId}`, data);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memperbarui cicilan pembayaran');
+      errorNotify(getErrorMessage(err) || 'Gagal memperbarui cicilan pembayaran');
       throw err;
     }
   },
@@ -235,10 +312,11 @@ export const invoiceService = {
    * Hapus cicilan pembayaran
    * @param {number} invoiceId
    * @param {number} paymentId
+   * @returns {Promise<boolean|null>}
    */
   async deletePayment(invoiceId, paymentId) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -246,7 +324,7 @@ export const invoiceService = {
       await api.delete(`/invoices/${company.id}/${invoiceId}/payments/${paymentId}`);
       return true;
     } catch (err) {
-      errorNotify(err.message || 'Gagal menghapus cicilan pembayaran');
+      errorNotify(getErrorMessage(err) || 'Gagal menghapus cicilan pembayaran');
       throw err;
     }
   },
@@ -255,21 +333,23 @@ export const invoiceService = {
    * Sinkronkan item invoice ke master data item
    * @param {number} invoiceId
    * @param {number} invoiceItemId - ID dari invoice_item (bukan item master)
+   * @returns {Promise<any>}
    */
   async syncItemToMaster(invoiceId, invoiceItemId) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
       }
 
       const response = await api.patch(
-        `/invoices/${company.id}/${invoiceId}/items/${invoiceItemId}/sync-to-master`
+        `/invoices/${company.id}/${invoiceId}/items/${invoiceItemId}/sync-to-master`,
+        {}
       );
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal sinkronkan ke master item');
+      errorNotify(getErrorMessage(err) || 'Gagal sinkronkan ke master item');
       throw err;
     }
   },
@@ -277,10 +357,11 @@ export const invoiceService = {
   /**
    * Hapus invoice (gagal jika ada kuitansi/surat jalan terhubung)
    * @param {number} id
+   * @returns {Promise<boolean|null>}
    */
   async delete(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -289,7 +370,7 @@ export const invoiceService = {
       await api.delete(`/invoices/${company.id}/${id}`);
       return true;
     } catch (err) {
-      errorNotify(err.message || 'Gagal menghapus invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal menghapus invoice');
       throw err;
     }
   },
@@ -297,16 +378,17 @@ export const invoiceService = {
   /**
    * Generate PDF invoice (template statis, termasuk riwayat pembayaran)
    * @param {number} id
+   * @returns {Promise<any>}
    */
   async generate(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) return null;
 
-      const response = await api.post(`/invoices/${company.id}/${id}/generate`);
+      const response = await api.post(`/invoices/${company.id}/${id}/generate`, {});
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal generate invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal generate invoice');
       throw err;
     }
   },
@@ -314,10 +396,11 @@ export const invoiceService = {
   /**
    * Unduh PDF invoice
    * @param {number} id
+   * @returns {Promise<Blob|null>}
    */
   async download(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -336,7 +419,7 @@ export const invoiceService = {
 
       return response.blob();
     } catch (err) {
-      errorNotify(err.message || 'Gagal download invoice');
+      errorNotify(getErrorMessage(err) || 'Gagal download invoice');
       throw err;
     }
   },

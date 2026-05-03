@@ -2,6 +2,7 @@
   import { navigate } from 'svelte-routing';
   import authService from '../services/auth.service.js';
   import { error as showError, success } from '../stores/notifications.js';
+  import { withBasePath } from '../lib/router.js';
   import logo from '../assets/logo.png';
 
   let email = '';
@@ -33,7 +34,7 @@
     try {
       const result = await authService.register(email, password, repeatPassword, name);
       success(result.message || 'Registrasi berhasil! Silakan cek email Anda untuk verifikasi.');
-      navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+      navigate(`${withBasePath('/verify-email')}?email=${encodeURIComponent(email)}`);
     } catch (err) {
       showError(err.message || 'Terjadi kesalahan saat registrasi');
     } finally {

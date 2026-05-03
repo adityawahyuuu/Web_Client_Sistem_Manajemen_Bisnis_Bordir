@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import authService from '../services/auth.service.js';
 import api from '../services/api.js';
+import { isPublicRoute } from '../lib/router.js';
 
 /**
  * SECURITY: User data stored in memory only (Svelte store)
@@ -8,7 +9,28 @@ import api from '../services/api.js';
  * Tokens stored securely in memory via tokenStorage service
  */
 
-export const user = writable(null);
+/**
+ * @typedef {Object} User
+ * @property {number} id
+ * @property {string} email
+ * @property {string} fullName
+ * @property {string} role
+ */
+
+/**
+ * @typedef {Object} Profile
+ * @property {number} id
+ * @property {string} email
+ * @property {string} [full_name]
+ * @property {string} [fullName]
+ * @property {string} [role]
+ */
+
+/**
+ * @type {import('svelte/store').Writable<User|null>}
+ */
+export const user = writable((null));
+
 export const isAuthenticated = writable(false);
 export const loading = writable(false);
 export const authInitializing = writable(true);
@@ -19,11 +41,10 @@ export const authInitializing = writable(true);
  */
 export async function initAuth() {
   // Skip refresh attempt on public routes (no session to restore)
-  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
-  const isPublicRoute = typeof window !== 'undefined' &&
-    publicRoutes.some(route => window.location.pathname.startsWith(route));
+  const checkIsPublicRoute = typeof window !== 'undefined' &&
+    isPublicRoute(window.location.pathname);
   
-  if (isPublicRoute) {
+  if (checkIsPublicRoute) {
     authInitializing.set(false);
     return;
   }
@@ -42,14 +63,16 @@ export async function initAuth() {
       isAuthenticated.set(true);
       // Load user profile after restoring session
       try {
-        const profile = await authService.getProfile();
+        /** @type {any|Profile|null} */
+        const profileData = await authService.getProfile();
+        const profile = (profileData);
         if (profile) {
-          user.set({
+          user.set(({
             id: profile.id,
             email: profile.email,
             fullName: profile.full_name || profile.fullName || '',
             role: profile.role || 'user'
-          });
+          }));
         }
       } catch (e) {
         // Profile fetch failed but token is valid, continue authenticated
@@ -62,15 +85,24 @@ export async function initAuth() {
   }
 }
 
+/**
+ * Login with email and password
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<{success: boolean, user?: User, error?: string}>}
+ */
 export async function login(email, password) {
   loading.set(true);
   try {
     const result = await authService.login(email, password);
-    user.set(result.user);
+    /** @type {User|any} */
+    const userData = (result.user);
+    user.set(userData);
     isAuthenticated.set(true);
-    return { success: true, user: result.user };
+    return { success: true, user: userData };
   } catch (error) {
-    return { success: false, error: error.message || 'Email atau password salah' };
+    const message = error instanceof Error ? error.message : 'Email atau password salah';
+    return { success: false, error: message };
   } finally {
     loading.set(false);
   }
@@ -86,15 +118,24 @@ export async function logout() {
   isAuthenticated.set(false);
 }
 
+/**
+ * Load and update user profile
+ * @returns {Promise<any>}
+ */
 export async function getProfile() {
   try {
-    const profile = await authService.getProfile();
+    const profileData = await authService.getProfile();
+    const profile = /** @type {Profile|null} */ (profileData);
     if (profile) {
-      user.update(u => ({
-        ...u,
-        fullName: profile.full_name || u?.fullName,
-        role: profile.role || u?.role
-      }));
+      user.update((u) => {
+        if (!u) return null;
+        return {
+          id: u.id,
+          email: u.email,
+          fullName: profile.full_name || u.fullName,
+          role: profile.role || u.role
+        };
+      });
     }
     return profile;
   } catch (error) {

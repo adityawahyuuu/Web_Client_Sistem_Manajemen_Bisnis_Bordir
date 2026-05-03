@@ -2,18 +2,28 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // https://vite.dev/config/
+const webBasePath = process.env.VITE_WEB_BASE_PATH || '/patchwork/web';
+const apiPrefix = process.env.VITE_API_PREFIX || '/patchwork/api';
+const apiBaseUrl = process.env.VITE_API_BASE_URL || 'http://localhost:5090';
+
+// Extract base path from prefix (e.g., '/patchwork/api' from '/patchwork/api/v1')
+const apiBasePath = apiPrefix.split('/v')[0] || '/patchwork/api';
+
 export default defineConfig({
+  base: `${webBasePath}`,
   plugins: [svelte()],
   optimizeDeps: {
     exclude: ['svelte-routing']
   },
   server: {
-    port: 5000,
+    port: 5173,
+    allowedHosts: ['dev.aligness-teamweb.com', 'localhost'],
     proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
+      [apiBasePath]: {
+        target: apiBaseUrl,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        rewrite: (path) => path.replace(/^\/patchwork/, '')
       }
     }
   },

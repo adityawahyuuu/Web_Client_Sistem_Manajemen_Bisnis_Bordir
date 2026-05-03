@@ -1,6 +1,12 @@
 import api from './api.js';
 
 export const authService = {
+  /**
+   * Login with email and password
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @returns {Promise<{user: Object, expiresIn: number}>} Login response
+   */
   async login(email, password) {
     // Backend sets httpOnly cookie for refresh token automatically
     const response = await api.post('/auth/login', { email, password });
@@ -26,6 +32,10 @@ export const authService = {
     throw new Error(response.message || 'Login failed');
   },
 
+  /**
+   * Logout user
+   * @returns {Promise<void>}
+   */
   async logout() {
     try {
       // Backend clears httpOnly refresh token cookie
@@ -36,6 +46,10 @@ export const authService = {
     api.clearTokens();
   },
 
+  /**
+   * Get current user profile
+   * @returns {Promise<Object|null>} User profile or null if error
+   */
   async getProfile() {
     try {
       const response = await api.get('/auth/profile');
@@ -46,6 +60,14 @@ export const authService = {
     }
   },
 
+  /**
+   * Register new user
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @param {string} repeatPassword - Repeat password confirmation
+   * @param {string} name - User full name
+   * @returns {Promise<Object>} Registration response
+   */
   async register(email, password, repeatPassword, name) {
     const response = await api.post('/auth/register', {
       email,
@@ -61,6 +83,12 @@ export const authService = {
     throw new Error(response.message || 'Registration failed');
   },
 
+  /**
+   * Verify email with OTP code
+   * @param {string} email - User email
+   * @param {string} otpCode - OTP code from email
+   * @returns {Promise<Object>} Verification response
+   */
   async verifyEmail(email, otpCode) {
     const response = await api.post('/auth/verify-email', {
       email,
@@ -74,6 +102,11 @@ export const authService = {
     throw new Error(response.message || 'Email verification failed');
   },
 
+  /**
+   * Resend OTP code to email
+   * @param {string} email - User email
+   * @returns {Promise<Object>} Resend response
+   */
   async resendOtp(email) {
     const response = await api.post('/auth/resend-otp', { email });
 
@@ -84,6 +117,11 @@ export const authService = {
     throw new Error(response.message || 'Failed to resend OTP');
   },
 
+  /**
+   * Send password reset link to email
+   * @param {string} email - User email
+   * @returns {Promise<Object>} Reset link response
+   */
   async forgotPassword(email) {
     const response = await api.post('/auth/forgot-password', { email });
 
@@ -94,6 +132,13 @@ export const authService = {
     throw new Error(response.message || 'Failed to send reset link');
   },
 
+  /**
+   * Reset password with token
+   * @param {string} token - Reset token from email link
+   * @param {string} password - New password
+   * @param {string} repeatPassword - Repeat password confirmation
+   * @returns {Promise<Object>} Reset response
+   */
   async resetPassword(token, password, repeatPassword) {
     const response = await api.post('/auth/reset-password', {
       token,
@@ -108,15 +153,29 @@ export const authService = {
     throw new Error(response.message || 'Password reset failed');
   },
 
+  /**
+   * Check if user is logged in
+   * @returns {boolean}
+   */
   isLoggedIn() {
     return api.isAuthenticated();
   },
 
+  /**
+   * Get all users
+   * @returns {Promise<Object|Array<any>>} Users data
+   */
   async getAllUsers() {
     const response = await api.get('/auth/users');
     return response.data || response;
   },
 
+  /**
+   * Set user role
+   * @param {string} userId - User ID
+   * @param {string} role - User role
+   * @returns {Promise<Object>} Updated user data
+   */
   async setUserRole(userId, role) {
     const response = await api.put(`/auth/users/${userId}/role`, { role });
     return response.data || response;

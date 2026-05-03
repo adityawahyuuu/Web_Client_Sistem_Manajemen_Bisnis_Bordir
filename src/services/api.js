@@ -1,6 +1,16 @@
 import tokenStorage from './tokenStorage.js';
-const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api/v1';
-const API_BASE_URL = import.meta.env.VITE_API_BASEURI || 'http://localhost:3000';
+import { withBasePath } from '../lib/router.js';
+
+const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/patchwork/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASEURI || 'http://localhost:5090';
+
+/**
+ * @typedef {Object} RequestOptions
+ * @property {string} [method] - HTTP method
+ * @property {Object} [headers] - Custom headers
+ * @property {Object} [body] - Request body
+ * @property {boolean} [_isRetry] - Internal retry flag
+ */
 
 class ApiService {
   constructor() {
@@ -15,14 +25,19 @@ class ApiService {
 
   /**
    * Store access token in memory and schedule proactive refresh.
-   * @param {string} accessToken
-   * @param {number} expiresIn - seconds
+   * @param {string} accessToken - Access token
+   * @param {number} expiresIn - Token expiration time in seconds
+   * @returns {void}
    */
   setTokens(accessToken, expiresIn) {
     tokenStorage.setAccessToken(accessToken, expiresIn);
     tokenStorage.scheduleRefresh(() => this.refreshAccessToken());
   }
 
+  /**
+   * Clear all stored tokens
+   * @returns {void}
+   */
   clearTokens() {
     tokenStorage.clearTokens();
     this._refreshPromise = null;
@@ -71,6 +86,9 @@ class ApiService {
 
   /**
    * Central request method with automatic 401 retry.
+   * @param {string} endpoint - API endpoint path
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
    */
   async request(endpoint, options = {}) {
     const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/refresh-token');
@@ -82,10 +100,13 @@ class ApiService {
 
     const url = `${this.baseUrl}${endpoint}`;
 
-    const headers = {
-      'Content-Type': 'application/json',
-      ...options.headers
-    };
+    /** @type {Record<string, string>} */
+    const headers = {};
+    headers['Content-Type'] = 'application/json';
+
+    if (options.headers && typeof options.headers === 'object') {
+      Object.assign(headers, options.headers);
+    }
 
     const token = this.getAuthToken();
     if (token) {
@@ -121,7 +142,7 @@ class ApiService {
             // Refresh failed — clear session, redirect to login
             this.clearTokens();
             if (typeof window !== 'undefined') {
-              window.location.href = '/login';
+              window.location.href = withBasePath('/login');
             }
           }
 
@@ -142,22 +163,55 @@ class ApiService {
     }
   }
 
+  /**
+   * GET request
+   * @param {string} endpoint - API endpoint path
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
+   */
   get(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'GET' });
   }
 
+  /**
+   * POST request
+   * @param {string} endpoint - API endpoint path
+   * @param {Object} body - Request body
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
+   */
   post(endpoint, body, options = {}) {
     return this.request(endpoint, { ...options, method: 'POST', body });
   }
 
+  /**
+   * PUT request
+   * @param {string} endpoint - API endpoint path
+   * @param {Object} body - Request body
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
+   */
   put(endpoint, body, options = {}) {
     return this.request(endpoint, { ...options, method: 'PUT', body });
   }
 
+  /**
+   * PATCH request
+   * @param {string} endpoint - API endpoint path
+   * @param {Object} body - Request body
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
+   */
   patch(endpoint, body, options = {}) {
     return this.request(endpoint, { ...options, method: 'PATCH', body });
   }
 
+  /**
+   * DELETE request
+   * @param {string} endpoint - API endpoint path
+   * @param {RequestOptions} options - Request options
+   * @returns {Promise<any>} API response data
+   */
   delete(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'DELETE' });
   }

@@ -3,10 +3,69 @@ import { get } from 'svelte/store';
 import { selectedCompany } from '../stores/company.js';
 import { error as errorNotify } from '../stores/notifications.js';
 
+/**
+ * Helper to get error message from unknown error
+ * @param {unknown} err - Error object
+ * @returns {string} Error message
+ */
+function getErrorMessage(err) {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'Terjadi kesalahan';
+}
+
+/**
+ * @typedef {Object} Company
+ * @property {number} id - Company ID
+ */
+
+/**
+ * Helper to safely get company with id property
+ * @returns {Company|null}
+ */
+function getSelectedCompany() {
+  return (get(selectedCompany));
+}
+
+/**
+ * @typedef {Object} GetAllReceiptsParams
+ * @property {number} [page]
+ * @property {number} [limit]
+ * @property {string} [customer_id]
+ * @property {string} [invoice_id]
+ * @property {string} [payment_method]
+ * @property {string} [status]
+ * @property {string} [search]
+ */
+
+/**
+ * @typedef {Object} CreateReceiptParams
+ * @property {number} customer_id
+ * @property {number} [invoice_id]
+ * @property {string} [receipt_date]
+ * @property {number} amount
+ * @property {string} [payment_method]
+ * @property {string} [status]
+ * @property {string} [description]
+ * @property {string} [received_by]
+ * @property {string} [notes]
+ */
+
+/**
+ * @typedef {Object} UpdateReceiptParams
+ * @property {number} [amount]
+ * @property {string} [payment_method]
+ * @property {string} [status]
+ * @property {string} [description]
+ * @property {string} [received_by]
+ * @property {string} [notes]
+ */
+
 export const receiptService = {
   /**
    * Ambil daftar kuitansi dengan filter
-   * @param {{ page?, limit?, customer_id?, invoice_id?, payment_method?, status?, search? }} params
+   * @param {GetAllReceiptsParams} [params]
+   * @returns {Promise<{data: Array<any>, meta: Object}|null>}
    */
   async getAll({
     page = 1,
@@ -18,7 +77,7 @@ export const receiptService = {
     search = ''
   } = {}) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -37,7 +96,7 @@ export const receiptService = {
         meta: response.meta || { page, limit, total: 0, totalPages: 0 }
       };
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat data kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal memuat data kuitansi');
       return null;
     }
   },
@@ -45,10 +104,11 @@ export const receiptService = {
   /**
    * Ambil detail kuitansi
    * @param {number} id
+   * @returns {Promise<any>}
    */
   async getById(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -56,18 +116,19 @@ export const receiptService = {
       const response = await api.get(`/receipts/${company.id}/${id}`);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memuat detail kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal memuat detail kuitansi');
       return null;
     }
   },
 
   /**
    * Buat kuitansi baru
-   * @param {{ customer_id, invoice_id?, receipt_date?, amount, payment_method?, status?, description?, received_by?, notes? }} data
+   * @param {CreateReceiptParams} data
+   * @returns {Promise<any>}
    */
   async create(data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -89,7 +150,7 @@ export const receiptService = {
       const response = await api.post(`/receipts/${company.id}`, apiData);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal membuat kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal membuat kuitansi');
       throw err;
     }
   },
@@ -97,17 +158,17 @@ export const receiptService = {
   /**
    * Perbarui kuitansi (hanya field yang diizinkan)
    * @param {number} id
-   * @param {{ amount?, payment_method?, status?, description?, received_by?, notes? }} data
+   * @param {UpdateReceiptParams} data
+   * @returns {Promise<any>}
    */
   async update(id, data) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
       }
 
-      // Hanya field yang diizinkan PUT — customer_id & invoice_id TIDAK bisa diubah
       const apiData = {
         amount:      data.amount,
         payment_method: data.payment_method,
@@ -120,7 +181,7 @@ export const receiptService = {
       const response = await api.put(`/receipts/${company.id}/${id}`, apiData);
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal memperbarui kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal memperbarui kuitansi');
       throw err;
     }
   },
@@ -128,10 +189,11 @@ export const receiptService = {
   /**
    * Hapus kuitansi (otomatis recalculate status invoice jika terhubung)
    * @param {number} id
+   * @returns {Promise<boolean|null>}
    */
   async delete(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) {
         errorNotify('Silakan pilih perusahaan terlebih dahulu');
         return null;
@@ -139,7 +201,7 @@ export const receiptService = {
       await api.delete(`/receipts/${company.id}/${id}`);
       return true;
     } catch (err) {
-      errorNotify(err.message || 'Gagal menghapus kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal menghapus kuitansi');
       throw err;
     }
   },
@@ -147,15 +209,16 @@ export const receiptService = {
   /**
    * Generate PDF kuitansi (template statis)
    * @param {number} id
+   * @returns {Promise<any>}
    */
   async generate(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) return null;
-      const response = await api.post(`/receipts/${company.id}/${id}/generate`);
+      const response = await api.post(`/receipts/${company.id}/${id}/generate`, {});
       return response.data || response;
     } catch (err) {
-      errorNotify(err.message || 'Gagal generate kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal generate kuitansi');
       throw err;
     }
   },
@@ -163,10 +226,11 @@ export const receiptService = {
   /**
    * Unduh PDF kuitansi
    * @param {number} id
+   * @returns {Promise<Blob|null>}
    */
   async download(id) {
     try {
-      const company = get(selectedCompany);
+      const company = getSelectedCompany();
       if (!company?.id) return null;
       const token = api.getAuthToken();
       const url = `${api.baseUrl}/receipts/${company.id}/${id}/download`;
@@ -176,7 +240,7 @@ export const receiptService = {
       if (!response.ok) throw new Error('Gagal mengunduh kuitansi');
       return response.blob();
     } catch (err) {
-      errorNotify(err.message || 'Gagal download kuitansi');
+      errorNotify(getErrorMessage(err) || 'Gagal download kuitansi');
       throw err;
     }
   }

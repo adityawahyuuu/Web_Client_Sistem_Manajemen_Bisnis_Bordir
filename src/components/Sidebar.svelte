@@ -3,6 +3,7 @@
   import { user, logout } from '../stores/auth.js';
   import { selectedCompany, clearCompanyState } from '../stores/company.js';
   import { sidebarOpen, sidebarCollapsed } from '../stores/ui.js';
+  import { withBasePath, stripBasePath } from '../lib/router.js';
   import logoUrl from '../assets/logo.png';
 
   const location = useLocation();
@@ -49,8 +50,9 @@
   ];
 
   function isActive(path, currentPath) {
-    if (path === '/') return currentPath === '/';
-    return currentPath.startsWith(path);
+    const strippedPath = stripBasePath(currentPath);
+    if (path === '/') return strippedPath === '/';
+    return strippedPath.startsWith(path);
   }
 
   function handleLogout() {
@@ -112,7 +114,7 @@
   <nav class="flex-1 px-2 py-4 space-y-0.5">
     {#each mainMenuItems as item}
       <a
-        href={item.path}
+        href={withBasePath(item.path)}
         use:link
         on:click={closeSidebar}
         title={$sidebarCollapsed ? item.label : ''}
@@ -134,7 +136,7 @@
   <div class="border-t border-gray-700 px-2 py-4 space-y-0.5 flex-shrink-0">
     {#each bottomMenuItems as item}
       <a
-        href={item.path}
+        href={withBasePath(item.path)}
         use:link
         on:click={closeSidebar}
         title={$sidebarCollapsed ? item.label : ''}

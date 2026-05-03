@@ -1,12 +1,57 @@
 import { writable, derived } from 'svelte/store';
 import waybillService from '../services/waybill.service.js';
 
-export const waybills = writable([]);
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/**
+ * @typedef {Object} WaybillItem
+ * @property {number} id
+ * @property {number} waybill_id
+ * @property {string} name
+ * @property {number} quantity
+ * @property {string} unit
+ * @property {string} notes
+ */
+
+/**
+ * @typedef {Object} Waybill
+ * @property {number} id
+ * @property {number} company_id
+ * @property {number} customer_id
+ * @property {number|null} invoice_id
+ * @property {string} waybill_number
+ * @property {string} waybill_date
+ * @property {string} destination_address
+ * @property {string} destination_city
+ * @property {string} destination_province
+ * @property {string} expedition_name
+ * @property {string} vehicle_number
+ * @property {string} driver_name
+ * @property {string} notes
+ * @property {'pending' | 'in_transit' | 'delivered'} status
+ * @property {Array<WaybillItem>} waybill_items
+ * @property {string} created_at
+ * @property {string} updated_at
+ */
+
+// =============================================================================
+// STORES
+// =============================================================================
+
+export const waybills = writable(/** @type {Array<Waybill>} */ ([]));
 export const waybillsLoading = writable(false);
 
 // =============================================================================
 // HELPER
 // =============================================================================
+
+/**
+ * Format date string
+ * @param {unknown} dateVal
+ * @returns {string}
+ */
 function formatDateStr(dateVal) {
   if (!dateVal) return '';
   if (typeof dateVal === 'string') return dateVal.split('T')[0];
@@ -14,6 +59,11 @@ function formatDateStr(dateVal) {
   return '';
 }
 
+/**
+ * Normalize waybill item from API response
+ * @param {any} item
+ * @returns {WaybillItem}
+ */
 function normalizeWaybillItem(item) {
   return {
     id:         item.id,
@@ -25,6 +75,11 @@ function normalizeWaybillItem(item) {
   };
 }
 
+/**
+ * Normalize waybill from API response
+ * @param {any} w
+ * @returns {Waybill}
+ */
 function normalizeWaybill(w) {
   return {
     id:                   w.id,
@@ -41,7 +96,7 @@ function normalizeWaybill(w) {
     driver_name:          w.driver_name          || '',
     notes:                w.notes                || '',
     status:               w.status               || 'pending',
-    waybill_items:        (w.waybill_items || w.items || []).map(normalizeWaybillItem),
+    waybill_items:        (w.waybill_items || w.items || []).map((item) => normalizeWaybillItem(item)),
     created_at:           w.created_at,
     updated_at:           w.updated_at
   };
@@ -50,13 +105,14 @@ function normalizeWaybill(w) {
 // =============================================================================
 // DERIVED STORES
 // =============================================================================
-export const waybillCount = derived(waybills, $w => $w.length);
 
-export const waybillStats = derived(waybills, $waybills => ({
+export const waybillCount = derived(waybills, ($w) => $w.length);
+
+export const waybillStats = derived(waybills, ($waybills) => ({
   total:      $waybills.length,
-  pending:    $waybills.filter(w => w.status === 'pending').length,
-  in_transit: $waybills.filter(w => w.status === 'in_transit').length,
-  delivered:  $waybills.filter(w => w.status === 'delivered').length
+  pending:    $waybills.filter((w) => w.status === 'pending').length,
+  in_transit: $waybills.filter((w) => w.status === 'in_transit').length,
+  delivered:  $waybills.filter((w) => w.status === 'delivered').length
 }));
 
 // =============================================================================
@@ -65,14 +121,15 @@ export const waybillStats = derived(waybills, $waybills => ({
 
 /**
  * Muat daftar surat jalan dengan filter opsional
- * @param {{ page?, limit?, customer_id?, invoice_id?, status?, search? }} params
+ * @param {any} [params]
+ * @returns {Promise<void>}
  */
 export async function loadWaybills(params = {}) {
   waybillsLoading.set(true);
   try {
     const result = await waybillService.getAll({ limit: 100, ...params });
     if (result && result.data) {
-      waybills.set(result.data.map(normalizeWaybill));
+      waybills.set(result.data.map((item) => normalizeWaybill(item)));
     }
   } catch (error) {
     console.error('Error loading waybills:', error);
@@ -83,12 +140,14 @@ export async function loadWaybills(params = {}) {
 
 /**
  * Buat surat jalan baru
+ * @param {any} data
+ * @returns {Promise<Waybill|any>}
  */
 export async function addWaybill(data) {
   const result = await waybillService.create(data);
   if (result) {
     const normalized = normalizeWaybill(result);
-    waybills.update(list => [normalized, ...list]);
+    waybills.update((list) => [normalized, ...list]);
     return normalized;
   }
   return result;
@@ -96,12 +155,15 @@ export async function addWaybill(data) {
 
 /**
  * Perbarui surat jalan (items tidak dikirim — tidak bisa diubah via PUT)
+ * @param {number} id
+ * @param {any} data
+ * @returns {Promise<Waybill|any>}
  */
 export async function updateWaybill(id, data) {
   const result = await waybillService.update(id, data);
   if (result) {
     const normalized = normalizeWaybill(result);
-    waybills.update(list => list.map(w => w.id === id ? normalized : w));
+    waybills.update((list) => list.map((w) => w.id === id ? normalized : w));
     return normalized;
   }
   return result;
@@ -109,20 +171,25 @@ export async function updateWaybill(id, data) {
 
 /**
  * Hapus surat jalan
+ * @param {number} id
+ * @returns {Promise<void>}
  */
 export async function deleteWaybill(id) {
   await waybillService.delete(id);
-  waybills.update(list => list.filter(w => w.id !== id));
+  waybills.update((list) => list.filter((w) => w.id !== id));
 }
 
 /**
  * Update status saja (PATCH /status)
+ * @param {number} id
+ * @param {'pending' | 'in_transit' | 'delivered'} status
+ * @returns {Promise<Waybill|any>}
  */
 export async function patchWaybillStatus(id, status) {
   const result = await waybillService.patchStatus(id, status);
   if (result) {
     const normalized = normalizeWaybill(result);
-    waybills.update(list => list.map(w => w.id === id ? normalized : w));
+    waybills.update((list) => list.map((w) => w.id === id ? normalized : w));
     return normalized;
   }
   return result;

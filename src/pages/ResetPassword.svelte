@@ -2,6 +2,7 @@
   import { navigate } from 'svelte-routing';
   import authService from '../services/auth.service.js';
   import { error as showError, success } from '../stores/notifications.js';
+  import { withBasePath } from '../lib/router.js';
   import { onMount } from 'svelte';
   import logo from '../assets/logo.png';
 
@@ -17,7 +18,7 @@
     token = params.get('token') || '';
     if (!token) {
       showError('Token tidak valid');
-      navigate('/login');
+      navigate(withBasePath('/login'));
     }
   });
 
@@ -42,7 +43,7 @@
     try {
       const result = await authService.resetPassword(token, password, repeatPassword);
       success(result.message || 'Password berhasil direset! Silakan login dengan password baru.');
-      navigate('/login');
+      navigate(withBasePath('/login'));
     } catch (err) {
       showError(err.message || 'Gagal reset password. Token mungkin sudah expired.');
     } finally {

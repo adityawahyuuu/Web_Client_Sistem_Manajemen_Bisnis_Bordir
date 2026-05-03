@@ -4,14 +4,38 @@ import { selectedCompany } from './company.js';
 import { success, error as errorNotify } from './notifications.js';
 
 // =============================================================================
+// TYPES
+// =============================================================================
+
+/**
+ * @typedef {Object} Item
+ * @property {number} id
+ * @property {string} name
+ * @property {string} sku
+ * @property {string} unit
+ * @property {number} unit_price
+ * @property {string} description
+ * @property {string} category
+ * @property {boolean} is_active
+ */
+
+/**
+ * @typedef {Object} ItemsMeta
+ * @property {number} page
+ * @property {number} limit
+ * @property {number} total
+ * @property {number} totalPages
+ */
+
+// =============================================================================
 // STORES
 // =============================================================================
 
-/** @type {import('svelte/store').Writable<Array<object>>} List of items */
-export const items = writable([]);
+/** @type {import('svelte/store').Writable<Array<Item>>} List of items */
+export const items = writable(([]));
 
-/** @type {import('svelte/store').Writable<object>} Pagination meta */
-export const itemsMeta = writable({ page: 1, limit: 100, total: 0, totalPages: 0 });
+/** @type {import('svelte/store').Writable<ItemsMeta>} Pagination meta */
+export const itemsMeta = writable(({ page: 1, limit: 100, total: 0, totalPages: 0 }));
 
 /** @type {import('svelte/store').Writable<boolean>} Loading state */
 export const itemsLoading = writable(false);
@@ -22,17 +46,31 @@ export const itemsSearchTerm = writable('');
 // =============================================================================
 // HELPER
 // =============================================================================
+
+/**
+ * Convert decimal value to number
+ * @param {unknown} decimal
+ * @returns {number}
+ */
 function decimalToNumber(decimal) {
   if (typeof decimal === 'number') return decimal;
   if (typeof decimal === 'string') return Number(decimal);
 
-  if (decimal?.d && decimal?.e !== undefined) {
-    const digits = decimal.d.join('');
-    return Number(digits) * Math.pow(10, decimal.e - (digits.length - 1));
+  if (decimal && typeof decimal === 'object' && 'd' in decimal && 'e' in decimal) {
+    /** @type {unknown|any} */ 
+    const obj = (decimal);
+    const digits = obj.d.join('');
+    return Number(digits) * Math.pow(10, obj.e - (digits.length - 1));
   }
 
   return 0;
 }
+
+/**
+ * Normalize item from API response
+ * @param {any} apiItem
+ * @returns {Item}
+ */
 function normalizeItem(apiItem) {
   return {
     id: apiItem.id,
@@ -42,7 +80,7 @@ function normalizeItem(apiItem) {
     unit_price: decimalToNumber(apiItem.unit_price),
     description: apiItem.description ?? '',
     category: apiItem.category ?? '',
-    is_active: apiItem.is_active !== false // default true
+    is_active: apiItem.is_active !== false
   };
 }
 
@@ -62,16 +100,17 @@ export const hasItems = derived(items, ($items) => $items.length > 0);
 
 /**
  * Load all items for selected company
- * @param {number} page
- * @param {number} limit
- * @param {string} search
+ * @param {number} [page]
+ * @param {number} [limit]
+ * @param {string} [search]
+ * @returns {Promise<Array<Item>>}
  */
 export async function loadItems(page = 1, limit = 100, search = '') {
   itemsLoading.set(true);
   try {
     const result = await itemService.getAll(page, limit, search);
     if (result) {
-      const normalized = (result?.data || []).map(normalizeItem);
+      const normalized = (result?.data || []).map((item) => normalizeItem(item));
       items.set(normalized || []);
       itemsMeta.set(result.meta || { page, limit, total: 0, totalPages: 0 });
       return normalized;
@@ -88,6 +127,7 @@ export async function loadItems(page = 1, limit = 100, search = '') {
 /**
  * Search items with debounce support
  * @param {string} searchTerm
+ * @returns {Promise<Array<Item>>}
  */
 export async function searchItems(searchTerm) {
   itemsSearchTerm.set(searchTerm);
@@ -96,7 +136,8 @@ export async function searchItems(searchTerm) {
 
 /**
  * Create new item
- * @param {object} data - { name, description, unit, unit_price, sku, category }
+ * @param {any} data
+ * @returns {Promise<Item|undefined>}
  */
 export async function createItem(data) {
   itemsLoading.set(true);
@@ -104,7 +145,7 @@ export async function createItem(data) {
     const result = await itemService.create(data);
     if (result) {
       const normalized = normalizeItem(result);
-      items.update(list => [...list, normalized]);
+      items.update((list) => [...list, normalized]);
       success('Item berhasil ditambahkan');
       return normalized;
     }
@@ -119,7 +160,8 @@ export async function createItem(data) {
 /**
  * Update item
  * @param {number} itemId
- * @param {object} data
+ * @param {any} data
+ * @returns {Promise<Item|undefined>}
  */
 export async function updateItem(itemId, data) {
   itemsLoading.set(true);
@@ -127,7 +169,7 @@ export async function updateItem(itemId, data) {
     const result = await itemService.update(itemId, data);
     if (result) {
       const normalized = normalizeItem(result);
-      items.update(list => list.map(item => item.id === itemId ? normalized : item));
+      items.update((list) => list.map((item) => item.id === itemId ? normalized : item));
       success('Item berhasil diperbarui');
       return normalized;
     }
@@ -142,12 +184,13 @@ export async function updateItem(itemId, data) {
 /**
  * Delete item
  * @param {number} itemId
+ * @returns {Promise<void>}
  */
 export async function deleteItem(itemId) {
   itemsLoading.set(true);
   try {
     await itemService.delete(itemId);
-    items.update(list => list.filter(item => item.id !== itemId));
+    items.update((list) => list.filter((item) => item.id !== itemId));
     success('Item berhasil dihapus');
   } catch (err) {
     console.error('Error deleting item:', err);
@@ -160,6 +203,7 @@ export async function deleteItem(itemId) {
 /**
  * Get item by ID
  * @param {number} itemId
+ * @returns {Promise<any|null>}
  */
 export async function getItemById(itemId) {
   try {
@@ -172,6 +216,7 @@ export async function getItemById(itemId) {
 
 /**
  * Clear items state
+ * @returns {void}
  */
 export function clearItemsState() {
   items.set([]);
@@ -186,6 +231,7 @@ export function clearItemsState() {
 /**
  * Load customer-specific items
  * @param {number} customerId
+ * @returns {Promise<Array<any>>}
  */
 export async function loadCustomerItems(customerId) {
   try {
@@ -200,7 +246,8 @@ export async function loadCustomerItems(customerId) {
 /**
  * Create customer-specific item
  * @param {number} customerId
- * @param {object} data
+ * @param {any} data
+ * @returns {Promise<any>}
  */
 export async function createCustomerItem(customerId, data) {
   try {
@@ -219,6 +266,7 @@ export async function createCustomerItem(customerId, data) {
  * Delete customer-specific item
  * @param {number} customerId
  * @param {number} customerItemId
+ * @returns {Promise<void>}
  */
 export async function deleteCustomerItem(customerId, customerItemId) {
   try {

@@ -2,6 +2,7 @@
   import { navigate } from 'svelte-routing';
   import authService from '../services/auth.service.js';
   import { error as showError, success } from '../stores/notifications.js';
+  import { withBasePath } from '../lib/router.js';
   import { onMount } from 'svelte';
   import logo from '../assets/logo.png';
 
@@ -16,7 +17,7 @@
     email = params.get('email') || '';
     if (!email) {
       showError('Email tidak ditemukan');
-      navigate('/register');
+      navigate(withBasePath('/register'));
     }
   });
 
@@ -33,7 +34,7 @@
     try {
       const result = await authService.verifyEmail(email, otpCode);
       success(result.message || 'Email berhasil diverifikasi! Silakan login.');
-      navigate('/login');
+      navigate(withBasePath('/login'));
     } catch (err) {
       showError(err.message || 'Kode OTP tidak valid');
     } finally {

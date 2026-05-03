@@ -3,20 +3,54 @@ import companyService from '../services/company.service.js';
 import { success, error as errorNotify } from './notifications.js';
 
 // =============================================================================
+// TYPES
+// =============================================================================
+
+/**
+ * @typedef {Object} Company
+ * @property {number} id
+ * @property {string} [name]
+ * @property {string} [address]
+ * @property {string} [phone]
+ * @property {string} [email]
+ * @property {string} [website]
+ * @property {string} [logo]
+ */
+
+/**
+ * @typedef {Object} CompanySettings
+ * @property {number} [id]
+ * @property {string} [invoice_prefix]
+ * @property {string} [primary_color]
+ * @property {string} [secondary_color]
+ * @property {string} [font_family]
+ * @property {string} [font_size]
+ * @property {string} [header_text]
+ * @property {string} [footer_text]
+ * @property {string} [terms_conditions]
+ */
+
+// =============================================================================
 // STORES
 // =============================================================================
 
-/** @type {import('svelte/store').Writable<Array<object>>} List of companies */
-export const companies = writable([]);
+/**
+ * @type {import('svelte/store').Writable<Array<Company>>}
+ */
+export const companies = writable(([]));
 
-/** @type {import('svelte/store').Writable<object|null>} Currently selected company */
-export const selectedCompany = writable(null);
+/**
+ * @type {import('svelte/store').Writable<Company|null>}
+ */
+export const selectedCompany = writable((null));
 
 /** @type {import('svelte/store').Writable<boolean>} Loading state */
 export const companiesLoading = writable(false);
 
-/** @type {import('svelte/store').Writable<object|null>} Active company settings */
-export const companySettings = writable(null);
+/**
+ * @type {import('svelte/store').Writable<CompanySettings|null>}
+ */
+export const companySettings = writable((null));
 
 // =============================================================================
 // DERIVED STORES
@@ -48,6 +82,7 @@ const SELECTED_COMPANY_KEY = 'selectedCompanyId';
 
 /**
  * Save selected company ID to localStorage
+ * @param {number|undefined} companyId
  */
 function persistSelectedCompany(companyId) {
   if (companyId) {
@@ -71,12 +106,15 @@ function getPersistedCompanyId() {
 
 /**
  * Load all companies for current user
+ * @returns {Promise<Array<Company>>}
  */
 export async function loadCompanies() {
   companiesLoading.set(true);
   try {
+    /** @type {{data?: Array<Company>}|any} */ 
     const result = await companyService.getAll();
-    const companyList = result.data || result || [];
+    const resultData = (result);
+    const companyList = /** @type {Array<Company>} */ (resultData.data || result || []);
 
     companies.set(companyList);
 
@@ -86,7 +124,7 @@ export async function loadCompanies() {
       // Try to restore persisted selection
       const persistedId = getPersistedCompanyId();
       const persistedCompany = persistedId
-        ? companyList.find(c => c.id === persistedId)
+        ? companyList.find((c) => c.id === persistedId)
         : null;
 
       // Select persisted or first company
@@ -105,7 +143,7 @@ export async function loadCompanies() {
 
 /**
  * Select a company as active
- * @param {object} company
+ * @param {Company} company
  */
 export function selectCompany(company) {
   selectedCompany.set(company);
@@ -118,7 +156,7 @@ export function selectCompany(company) {
  */
 export function selectCompanyById(companyId) {
   const companyList = get(companies);
-  const company = companyList.find(c => c.id === companyId);
+  const company = companyList.find((c) => c.id === companyId);
   if (company) {
     selectCompany(company);
   }
@@ -127,22 +165,26 @@ export function selectCompanyById(companyId) {
 /**
  * Create new company
  * @param {object} data
+ * @returns {Promise<Company|undefined>}
  */
 export async function createCompany(data) {
   companiesLoading.set(true);
   try {
     const result = await companyService.create(data);
     if (result) {
-      companies.update(list => [...list, result.data || result]);
+      /** @type {CompanySettings|any} */ 
+      const resultData = (result);
+      const company = (resultData.data || result);
+      companies.update((list) => [...list, company]);
       success('Perusahaan berhasil dibuat');
 
       // Auto-select if first company
       const currentSelected = get(selectedCompany);
       if (!currentSelected) {
-        selectCompany(result.data || result);
+        selectCompany(company);
       }
 
-      return result.data || result;
+      return company;
     }
   } catch (err) {
     console.error('Error creating company:', err);
@@ -157,19 +199,22 @@ export async function createCompany(data) {
  * Update company
  * @param {number} id
  * @param {object} data
+ * @returns {Promise<Company|undefined>}
  */
 export async function updateCompany(id, data) {
   companiesLoading.set(true);
   try {
     const result = await companyService.update(id, data);
     if (result) {
-      const updated = result.data || result;
-      companies.update(list => list.map(c => c.id === id ? { ...c, ...updated } : c));
+      /** @type {{data?: Company}|any} */ 
+      const resultData = (result);
+      const updated = (resultData.data || result);
+      companies.update((list) => list.map((c) => c.id === id ? { ...c, ...updated } : c));
 
       // Update selected if it's the same
       const current = get(selectedCompany);
       if (current?.id === id) {
-        selectedCompany.set({ ...current, ...updated });
+        selectedCompany.set(({ ...current, ...updated }));
       }
 
       success('Perusahaan berhasil diperbarui');
@@ -187,12 +232,13 @@ export async function updateCompany(id, data) {
 /**
  * Delete company
  * @param {number} id
+ * @returns {Promise<void>}
  */
 export async function deleteCompany(id) {
   companiesLoading.set(true);
   try {
     await companyService.delete(id);
-    companies.update(list => list.filter(c => c.id !== id));
+    companies.update((list) => list.filter((c) => c.id !== id));
 
     // Clear selection if deleted
     const current = get(selectedCompany);
@@ -223,10 +269,11 @@ export function clearCompanyState() {
 /**
  * Load company settings
  * @param {number} companyId
+ * @returns {Promise<CompanySettings|null>}
  */
 export async function loadCompanySettings(companyId) {
   try {
-    const settings = await companyService.getSettings(companyId);
+    const settings = (await companyService.getSettings(companyId));
     companySettings.set(settings);
     return settings;
   } catch (err) {
@@ -239,12 +286,16 @@ export async function loadCompanySettings(companyId) {
  * Save company settings
  * @param {number} companyId
  * @param {object} data
+ * @returns {Promise<any>}
  */
 export async function saveCompanySettings(companyId, data) {
   try {
     const result = await companyService.updateSettings(companyId, data);
     if (result) {
-      companySettings.set(result);
+      /** @type {{data?: CompanySettings}} */ 
+      const resultData = (result);
+      const settings = (resultData.data || result);
+      companySettings.set(settings);
       success('Pengaturan perusahaan berhasil disimpan');
     }
     return result;

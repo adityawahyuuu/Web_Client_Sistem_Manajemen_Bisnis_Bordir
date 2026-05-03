@@ -1,24 +1,94 @@
 import { writable, derived } from 'svelte/store';
 import invoiceService from '../services/invoice.service.js';
 
-export const invoices = writable([]);
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/**
+ * @typedef {Object} InvoiceItem
+ * @property {number} id
+ * @property {number} invoice_id
+ * @property {number} item_id
+ * @property {string} name
+ * @property {string} description
+ * @property {number} quantity
+ * @property {number} unit_price
+ * @property {string} unit
+ * @property {number} discount_amount
+ * @property {string} discount_type
+ * @property {number} total_price
+ */
+
+/**
+ * @typedef {Object} Invoice
+ * @property {number} id
+ * @property {number} company_id
+ * @property {number} customer_id
+ * @property {string} invoice_number
+ * @property {string} invoice_date
+ * @property {string} due_date
+ * @property {string} po_number
+ * @property {number} subtotal
+ * @property {number} tax_amount
+ * @property {number} discount_amount
+ * @property {number} shipping_cost
+ * @property {number} total_amount
+ * @property {number} total_paid
+ * @property {string} payment_status
+ * @property {'draft' | 'sent' | 'paid' | 'cancelled'} status
+ * @property {string} notes
+ * @property {number} created_by
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {Array<InvoiceItem>} items
+ */
+
+/**
+ * @typedef {Object} LoadInvoicesParams
+ * @property {number} [page]
+ * @property {number} [limit]
+ * @property {string} [status]
+ * @property {string} [customer_id]
+ * @property {string} [search]
+ * @property {string} [date_from]
+ * @property {string} [date_to]
+ * @property {string} [payment_status]
+ */
+
+/**
+ * @type {import('svelte/store').Writable<Array<Invoice>>}
+ */
+export const invoices = writable(([]));
 export const invoicesLoading = writable(false);
 
 // =============================================================================
 // HELPER
 // =============================================================================
+
+/**
+ * Convert decimal value to number
+ * @param {unknown} decimal
+ * @returns {number}
+ */
 export function decimalToNumber(decimal) {
   if (typeof decimal === 'number') return decimal;
   if (typeof decimal === 'string') return Number(decimal);
 
-  if (decimal?.d && decimal?.e !== undefined) {
-    const digits = decimal.d.join('');
-    return Number(digits) * Math.pow(10, decimal.e - (digits.length - 1));
+  if (decimal && typeof decimal === 'object' && 'd' in decimal && 'e' in decimal) {
+    const obj = /** @type {{d: any[], e: number}} */ (decimal);
+    const digits = obj.d.join('');
+    return Number(digits) * Math.pow(10, obj.e - (digits.length - 1));
   }
 
   return 0;
 }
 
+/**
+ * Format date string
+ * @param {unknown} dateVal
+ * @returns {string}
+ */
 function formatDateStr(dateVal) {
   if (!dateVal) return '';
   if (typeof dateVal === 'string') return dateVal.split('T')[0];
@@ -26,6 +96,11 @@ function formatDateStr(dateVal) {
   return '';
 }
 
+/**
+ * Normalize invoice item
+ * @param {any} item
+ * @returns {InvoiceItem}
+ */
 function normalizeInvoiceItem(item) {
   const qty = decimalToNumber(item.quantity);
   const unitPrice = decimalToNumber(item.unit_price);
@@ -41,11 +116,15 @@ function normalizeInvoiceItem(item) {
     unit: item.unit || 'pcs',
     discount_amount: discountItem,
     discount_type: item.discount_type || 'Rp',
-    // total per baris = qty × unit_price - diskon_item
     total_price: decimalToNumber(item.total_price) || (qty * unitPrice - discountItem)
   };
 }
 
+/**
+ * Normalize invoice from API response
+ * @param {any} apiInvoice
+ * @returns {Invoice}
+ */
 function normalizeInvoice(apiInvoice) {
   return {
     id: apiInvoice.id,
@@ -67,7 +146,7 @@ function normalizeInvoice(apiInvoice) {
     created_by: apiInvoice.created_by,
     created_at: apiInvoice.created_at,
     updated_at: apiInvoice.updated_at,
-    items: (apiInvoice.invoice_items || apiInvoice.items || []).map(normalizeInvoiceItem)
+    items: (apiInvoice.invoice_items || apiInvoice.items || []).map((item) => normalizeInvoiceItem(item))
   };
 }
 
@@ -75,20 +154,20 @@ function normalizeInvoice(apiInvoice) {
 // DERIVED STORES
 // =============================================================================
 
-export const invoiceCount = derived(invoices, $invoices => $invoices.length);
+export const invoiceCount = derived(invoices, ($invoices) => $invoices.length);
 
-export const invoiceStats = derived(invoices, $invoices => ({
+export const invoiceStats = derived(invoices, ($invoices) => ({
   total: $invoices.length,
-  draft: $invoices.filter(i => i.status === 'draft').length,
-  sent: $invoices.filter(i => i.status === 'sent').length,
-  paid: $invoices.filter(i => i.status === 'paid').length,
-  cancelled: $invoices.filter(i => i.status === 'cancelled').length,
+  draft: $invoices.filter((i) => i.status === 'draft').length,
+  sent: $invoices.filter((i) => i.status === 'sent').length,
+  paid: $invoices.filter((i) => i.status === 'paid').length,
+  cancelled: $invoices.filter((i) => i.status === 'cancelled').length,
   totalAmount: $invoices.reduce((sum, i) => sum + (i.total_amount || 0), 0),
   totalPaid: $invoices.reduce((sum, i) => sum + (i.total_paid || 0), 0),
   byPaymentStatus: {
-    lunas: $invoices.filter(i => i.payment_status === 'lunas').length,
-    dp: $invoices.filter(i => i.payment_status === 'dp').length,
-    belum_bayar: $invoices.filter(i => i.payment_status === 'belum_bayar').length,
+    lunas: $invoices.filter((i) => i.payment_status === 'lunas').length,
+    dp: $invoices.filter((i) => i.payment_status === 'dp').length,
+    belum_bayar: $invoices.filter((i) => i.payment_status === 'belum_bayar').length,
   }
 }));
 
@@ -98,14 +177,15 @@ export const invoiceStats = derived(invoices, $invoices => ({
 
 /**
  * Muat daftar invoice dengan filter opsional
- * @param {{ page?, limit?, status?, customer_id?, search?, date_from?, date_to?, payment_status? }} params
+ * @param {LoadInvoicesParams} [params]
+ * @returns {Promise<void>}
  */
 export async function loadInvoices(params = {}) {
   invoicesLoading.set(true);
   try {
     const result = await invoiceService.getAll({ limit: 100, ...params });
     if (result && result.data) {
-      invoices.set(result.data.map(normalizeInvoice));
+      invoices.set(result.data.map((item) => normalizeInvoice(item)));
     }
   } catch (error) {
     console.error('Error loading invoices:', error);
@@ -116,12 +196,14 @@ export async function loadInvoices(params = {}) {
 
 /**
  * Buat invoice baru
+ * @param {any} data
+ * @returns {Promise<Invoice|any>}
  */
 export async function addInvoice(data) {
   const result = await invoiceService.create(data);
   if (result) {
     const normalized = normalizeInvoice(result);
-    invoices.update(list => [...list, normalized]);
+    invoices.update((list) => [...list, normalized]);
     return normalized;
   }
   return result;
@@ -129,12 +211,15 @@ export async function addInvoice(data) {
 
 /**
  * Perbarui invoice
+ * @param {number} id
+ * @param {any} data
+ * @returns {Promise<Invoice|any>}
  */
 export async function updateInvoice(id, data) {
   const result = await invoiceService.update(id, data);
   if (result) {
     const normalized = normalizeInvoice(result);
-    invoices.update(list => list.map(i => i.id === id ? normalized : i));
+    invoices.update((list) => list.map((i) => i.id === id ? normalized : i));
     return normalized;
   }
   return result;
@@ -142,12 +227,15 @@ export async function updateInvoice(id, data) {
 
 /**
  * Ubah status invoice saja (PATCH /status)
+ * @param {number} id
+ * @param {'draft' | 'sent' | 'paid' | 'cancelled'} status
+ * @returns {Promise<Invoice|any>}
  */
 export async function patchInvoiceStatus(id, status) {
   const result = await invoiceService.patchStatus(id, status);
   if (result) {
     const normalized = normalizeInvoice(result);
-    invoices.update(list => list.map(i => i.id === id ? normalized : i));
+    invoices.update((list) => list.map((i) => i.id === id ? normalized : i));
     return normalized;
   }
   return result;
@@ -155,14 +243,18 @@ export async function patchInvoiceStatus(id, status) {
 
 /**
  * Hapus invoice
+ * @param {number} id
+ * @returns {Promise<void>}
  */
 export async function deleteInvoice(id) {
   await invoiceService.delete(id);
-  invoices.update(list => list.filter(i => i.id !== id));
+  invoices.update((list) => list.filter((i) => i.id !== id));
 }
 
 /**
  * Muat riwayat pembayaran untuk invoice tertentu
+ * @param {number} id
+ * @returns {Promise<any>}
  */
 export async function loadInvoicePayments(id) {
   return invoiceService.getPayments(id);
@@ -170,12 +262,14 @@ export async function loadInvoicePayments(id) {
 
 /**
  * Reload satu invoice dari server lalu update store
+ * @param {number} invoiceId
+ * @returns {Promise<Invoice|null>}
  */
 async function refreshInvoice(invoiceId) {
   const updated = await invoiceService.getById(invoiceId);
   if (updated) {
     const normalized = normalizeInvoice(updated);
-    invoices.update(list => list.map(i => i.id === invoiceId ? normalized : i));
+    invoices.update((list) => list.map((i) => i.id === invoiceId ? normalized : i));
     return normalized;
   }
   return null;
@@ -183,6 +277,9 @@ async function refreshInvoice(invoiceId) {
 
 /**
  * Tambah cicilan pembayaran
+ * @param {number} invoiceId
+ * @param {any} data
+ * @returns {Promise<Invoice|null>}
  */
 export async function addInvoicePayment(invoiceId, data) {
   await invoiceService.addPayment(invoiceId, data);
@@ -191,6 +288,10 @@ export async function addInvoicePayment(invoiceId, data) {
 
 /**
  * Edit cicilan pembayaran
+ * @param {number} invoiceId
+ * @param {number} paymentId
+ * @param {any} data
+ * @returns {Promise<Invoice|null>}
  */
 export async function updateInvoicePaymentEntry(invoiceId, paymentId, data) {
   await invoiceService.updatePayment(invoiceId, paymentId, data);
@@ -199,6 +300,9 @@ export async function updateInvoicePaymentEntry(invoiceId, paymentId, data) {
 
 /**
  * Hapus cicilan pembayaran
+ * @param {number} invoiceId
+ * @param {number} paymentId
+ * @returns {Promise<Invoice|null>}
  */
 export async function deleteInvoicePaymentEntry(invoiceId, paymentId) {
   await invoiceService.deletePayment(invoiceId, paymentId);
@@ -207,6 +311,8 @@ export async function deleteInvoicePaymentEntry(invoiceId, paymentId) {
 
 /**
  * Generate PDF invoice
+ * @param {number} id
+ * @returns {Promise<any>}
  */
 export async function generateInvoicePdf(id) {
   return invoiceService.generate(id);
@@ -214,6 +320,8 @@ export async function generateInvoicePdf(id) {
 
 /**
  * Unduh PDF invoice
+ * @param {number} id
+ * @returns {Promise<Blob|null>}
  */
 export async function downloadInvoicePdf(id) {
   return invoiceService.download(id);

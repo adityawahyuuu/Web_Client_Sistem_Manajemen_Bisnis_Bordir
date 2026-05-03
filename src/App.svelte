@@ -8,6 +8,7 @@
   import { sidebarOpen, sidebarCollapsed } from './stores/ui.js';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
   import LazyRoute from './components/LazyRoute.svelte';
+  import { withBasePath, stripBasePath, isPublicRoute } from './lib/router.js';
 
   // Lazy load pages - Authentication
   const Login = () => import('./pages/Login.svelte');
@@ -24,7 +25,6 @@
   const Waybills = () => import('./pages/Waybills.svelte');
   const Receipts = () => import('./pages/Receipts.svelte');
   const Companies = () => import('./pages/Companies.svelte');
-  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
 
   // Track whether companies have been loaded for the current session
   let companiesInitialized = false;
@@ -45,10 +45,9 @@
   }
 
   $: if (!$authInitializing && !$isAuthenticated && typeof window !== 'undefined') {
-    const path = window.location.pathname;
-    const isPublicRoute = publicRoutes.some(route => path.startsWith(route));
-    if (!isPublicRoute) {
-      navigate('/login', { replace: true });
+    const path = stripBasePath(window.location.pathname);
+    if (!isPublicRoute(window.location.pathname)) {
+      navigate(withBasePath('/login'), { replace: true });
     }
   }
 </script>
@@ -68,21 +67,21 @@
     <div class="flex h-screen overflow-hidden bg-gray-100">
       <Sidebar />
       <main class="flex-1 min-w-0 overflow-y-auto transition-all duration-300">
-        <LazyRoute path="/" component={Dashboard} />
-        <LazyRoute path="/customers" component={Customers} />
-        <LazyRoute path="/items" component={Items} />
-        <LazyRoute path="/invoices" component={Invoices} />
-        <LazyRoute path="/waybills" component={Waybills} />
-        <LazyRoute path="/receipts" component={Receipts} />
-        <LazyRoute path="/companies" component={Companies} />
+        <LazyRoute path={withBasePath('/')} component={Dashboard} />
+        <LazyRoute path={withBasePath('/customers')} component={Customers} />
+        <LazyRoute path={withBasePath('/items')} component={Items} />
+        <LazyRoute path={withBasePath('/invoices')} component={Invoices} />
+        <LazyRoute path={withBasePath('/waybills')} component={Waybills} />
+        <LazyRoute path={withBasePath('/receipts')} component={Receipts} />
+        <LazyRoute path={withBasePath('/companies')} component={Companies} />
       </main>
     </div>
   {:else}
-    <LazyRoute path="/login" component={Login} />
-    <LazyRoute path="/register" component={Register} />
-    <LazyRoute path="/verify-email" component={VerifyEmail} />
-    <LazyRoute path="/forgot-password" component={ForgotPassword} />
-    <LazyRoute path="/reset-password" component={ResetPassword} />
-    <LazyRoute path="*" component={Login} />
+    <LazyRoute path={withBasePath('/login')} component={Login} />
+    <LazyRoute path={withBasePath('/register')} component={Register} />
+    <LazyRoute path={withBasePath('/verify-email')} component={VerifyEmail} />
+    <LazyRoute path={withBasePath('/forgot-password')} component={ForgotPassword} />
+    <LazyRoute path={withBasePath('/reset-password')} component={ResetPassword} />
+    <LazyRoute path={withBasePath('/*')} component={Login} />
   {/if}
 </Router>

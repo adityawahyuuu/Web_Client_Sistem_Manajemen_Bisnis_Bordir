@@ -2,6 +2,7 @@
   import { navigate } from 'svelte-routing';
   import { login } from '../stores/auth.js';
   import { error as showError, success } from '../stores/notifications.js';
+  import { withBasePath } from '../lib/router.js';
   import logo from '../assets/logo.png';
 
   let email = '';
@@ -21,7 +22,7 @@
       const result = await login(email, password);
       if (result.success) {
         success('Login berhasil!');
-        navigate('/');
+        navigate(withBasePath('/'));
       } else {
         showError(result.error);
       }

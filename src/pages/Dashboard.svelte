@@ -1,5 +1,6 @@
 <script>
   import { link } from 'svelte-routing';
+  import { withBasePath } from '../lib/router.js';
   import { customers, customerCount, loadCustomers } from '../stores/customers.js';
   import { invoices, invoiceStats, invoicesLoading, loadInvoices } from '../stores/invoices.js';
   import { waybillStats, loadWaybills } from '../stores/waybills.js';
@@ -69,7 +70,7 @@
         </div>
         <h2 class="text-xl font-semibold text-gray-900 mb-2">Selamat Datang!</h2>
         <p class="text-gray-500 mb-6">Buat perusahaan pertama Anda untuk mulai mengelola invoice, surat jalan, dan kwitansi.</p>
-        <a href="/companies" use:link class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+        <a href={withBasePath('/companies')} use:link class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -98,7 +99,7 @@
 
       <!-- Quick actions -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <a href="/invoices" use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
+        <a href={withBasePath('/invoices')} use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
           <div class="w-9 h-9 md:w-10 md:h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0 md:mb-3 group-hover:bg-blue-100 transition-colors">
             <svg class="w-4 h-4 md:w-5 md:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -110,7 +111,7 @@
           </div>
         </a>
 
-        <a href="/receipts" use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-green-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
+        <a href={withBasePath('/receipts')} use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-green-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
           <div class="w-9 h-9 md:w-10 md:h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0 md:mb-3 group-hover:bg-green-100 transition-colors">
             <svg class="w-4 h-4 md:w-5 md:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -122,7 +123,7 @@
           </div>
         </a>
 
-        <a href="/waybills" use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-orange-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
+        <a href={withBasePath('/waybills')} use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-orange-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
           <div class="w-9 h-9 md:w-10 md:h-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0 md:mb-3 group-hover:bg-orange-100 transition-colors">
             <svg class="w-4 h-4 md:w-5 md:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
@@ -134,7 +135,7 @@
           </div>
         </a>
 
-        <a href="/customers" use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-purple-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
+        <a href={withBasePath('/customers')} use:link class="bg-white rounded-xl border border-gray-200 p-4 hover:border-purple-300 hover:shadow-sm transition-all group flex items-center gap-3 md:flex-col md:items-start md:p-5">
           <div class="w-9 h-9 md:w-10 md:h-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0 md:mb-3 group-hover:bg-purple-100 transition-colors">
             <svg class="w-4 h-4 md:w-5 md:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -152,7 +153,7 @@
         <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Total Pelanggan</p>
           <p class="text-2xl sm:text-3xl font-bold text-gray-900">{$customerCount}</p>
-          <a href="/customers" use:link class="text-xs text-blue-600 hover:underline mt-2 inline-block">Lihat semua →</a>
+          <a href={withBasePath('/customers')} use:link class="text-xs text-blue-600 hover:underline mt-2 inline-block">Lihat semua →</a>
         </div>
 
         <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
@@ -186,7 +187,7 @@
         <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 class="text-sm font-semibold text-gray-900">Invoice Terbaru</h2>
-            <a href="/invoices" use:link class="text-xs text-blue-600 hover:underline">Lihat semua</a>
+            <a href={withBasePath('/invoices')} use:link class="text-xs text-blue-600 hover:underline">Lihat semua</a>
           </div>
           {#if $invoicesLoading}
             <div class="flex items-center justify-center py-12">

@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { link } from 'svelte-routing';
+  import { withBasePath } from '../lib/router.js';
   import {
     companies,
     selectedCompany,
@@ -127,7 +128,7 @@
       <!-- Actions -->
       <div class="p-2">
         <a
-          href="/companies"
+          href={withBasePath('/companies')}
           use:link
           class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
           on:click={() => isOpen = false}
@@ -138,7 +139,7 @@
           Tambah Perusahaan Baru
         </a>
         <a
-          href="/companies"
+          href={withBasePath('/companies')}
           use:link
           class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
           on:click={() => isOpen = false}
