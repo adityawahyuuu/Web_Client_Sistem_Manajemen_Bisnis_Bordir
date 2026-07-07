@@ -1,5 +1,5 @@
 <script>
-  import { navigate } from 'svelte-routing';
+  import { navigate, link } from 'svelte-routing';
   import { login } from '../stores/auth.js';
   import { error as showError, success } from '../stores/notifications.js';
   import { withBasePath } from '../lib/router.js';
@@ -108,7 +108,7 @@
 
         <!-- Lupa password -->
         <div class="flex justify-end -mt-1">
-          <a href="/forgot-password" class="text-xs text-blue-600 hover:text-blue-700 font-medium">
+          <a href={withBasePath('/forgot-password')} use:link class="text-xs text-blue-600 hover:text-blue-700 font-medium">
             Lupa password?
           </a>
         </div>
@@ -125,7 +125,7 @@
 
       <p class="mt-6 text-center text-sm text-gray-500">
         Belum punya akun?
-        <a href="/register" class="text-blue-600 hover:text-blue-700 font-medium">Daftar di sini</a>
+        <a href={withBasePath('/register')} use:link class="text-blue-600 hover:text-blue-700 font-medium">Daftar di sini</a>
       </p>
     </div>
 

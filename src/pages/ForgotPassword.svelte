@@ -90,7 +90,7 @@
             Kirim Ulang
           </button>
 
-          <a href="/login" class="block w-full btn-primary text-center">
+          <a href={withBasePath('/login')} use:link class="block w-full btn-primary text-center">
             Kembali ke Login
           </a>
         </div>

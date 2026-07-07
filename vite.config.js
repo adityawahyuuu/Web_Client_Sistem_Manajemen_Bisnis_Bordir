@@ -17,7 +17,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    allowedHosts: ['dev.aligness-teamweb.com', 'localhost'],
+    allowedHosts: ['stg.entitypradhana.id', 'localhost'],
     proxy: {
       [apiBasePath]: {
         target: apiBaseUrl,

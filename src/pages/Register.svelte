@@ -1,5 +1,5 @@
 <script>
-  import { navigate } from 'svelte-routing';
+  import { navigate, link } from 'svelte-routing';
   import authService from '../services/auth.service.js';
   import { error as showError, success } from '../stores/notifications.js';
   import { withBasePath } from '../lib/router.js';
@@ -182,7 +182,7 @@
 
       <p class="mt-6 text-center text-sm text-gray-500">
         Sudah punya akun?
-        <a href="/login" class="text-blue-600 hover:text-blue-700 font-medium">Login di sini</a>
+        <a href={withBasePath('/login')} use:link class="text-blue-600 hover:text-blue-700 font-medium">Login di sini</a>
       </p>
     </div>
 
