@@ -27,6 +27,15 @@ export default defineConfig({
       }
     }
   },
+  // Fixed to match the dev server port so `vite preview` behaves the same way.
+  // This is what actually serves the app in Docker (see Dockerfile) — host:
+  // true binds 0.0.0.0 so it's reachable from outside the container, not
+  // just from localhost inside it.
+  preview: {
+    port: 5173,
+    host: true,
+    allowedHosts: ['stg.entitypradhana.id', 'localhost']
+  },
   build: {
     rollupOptions: {
       output: {

@@ -2,7 +2,7 @@ import tokenStorage from './tokenStorage.js';
 import { withBasePath } from '../lib/router.js';
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/patchwork/api';
-const API_BASE_URL = import.meta.env.VITE_API_BASEURI || 'http://localhost:5090';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5090';
 
 /**
  * @typedef {Object} RequestOptions

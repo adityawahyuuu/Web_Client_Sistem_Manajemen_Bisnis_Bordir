@@ -1,0 +1,61 @@
+name: CI/CD - Web
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: bash
+    env:
+      COMPOSE_DIR: "/d/gawe/Full Stack - Patchwork_Invoice_System"
+      IMAGE_TAG: patchwork-invoice-system-web:latest
+      # Vite bakes these into the JS bundle at build time (see Dockerfile) —
+      # they're public URLs, not secrets, so plain env vars here are fine.
+      VITE_API_BASE_URL: https://stg.entitypradhana.id
+      VITE_API_PREFIX: /patchwork/api
+      VITE_WEB_BASE_PATH: /patchwork/web
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tagged to match what docker-compose.yml expects for this service, so
+      # the `docker compose up` step below reuses this image instead of
+      # rebuilding from the old on-disk checkout.
+      - name: Build Docker image
+        run: |
+          docker build -t "$IMAGE_TAG" \
+            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+            --build-arg VITE_API_PREFIX="$VITE_API_PREFIX" \
+            --build-arg VITE_WEB_BASE_PATH="$VITE_WEB_BASE_PATH" \
+            .
+
+      - name: Deploy (recreate container with the new image)
+        run: |
+          cd "$COMPOSE_DIR"
+          docker compose up -d web
+
+      - name: Health check
+        run: |
+          sleep 3
+          curl -f http://localhost:5173/patchwork/web/
