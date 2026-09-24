@@ -11,7 +11,11 @@ jobs:
     runs-on: self-hosted
     defaults:
       run:
-        shell: bash
+        # Windows PowerShell 5.1 — this runner doesn't have pwsh (PowerShell
+        # Core) installed. `shell: bash` breaks here: the runner hands bash a
+        # Windows-style temp script path (D:\...\xxx.sh) and bash eats the
+        # backslashes as escape characters, corrupting the path.
+        shell: powershell
     steps:
       - uses: actions/checkout@v4
 
@@ -27,9 +31,9 @@ jobs:
     runs-on: self-hosted
     defaults:
       run:
-        shell: bash
+        shell: powershell
     env:
-      COMPOSE_DIR: "/d/gawe/Full Stack - Patchwork_Invoice_System"
+      COMPOSE_DIR: 'D:\gawe\Full Stack - Patchwork_Invoice_System'
       IMAGE_TAG: patchwork-invoice-system-web:latest
       # Vite bakes these into the JS bundle at build time (see Dockerfile) —
       # they're public URLs, not secrets, so plain env vars here are fine.
@@ -44,18 +48,22 @@ jobs:
       # rebuilding from the old on-disk checkout.
       - name: Build Docker image
         run: |
-          docker build -t "$IMAGE_TAG" \
-            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
-            --build-arg VITE_API_PREFIX="$VITE_API_PREFIX" \
-            --build-arg VITE_WEB_BASE_PATH="$VITE_WEB_BASE_PATH" \
+          docker build -t $env:IMAGE_TAG `
+            --build-arg VITE_API_BASE_URL=$env:VITE_API_BASE_URL `
+            --build-arg VITE_API_PREFIX=$env:VITE_API_PREFIX `
+            --build-arg VITE_WEB_BASE_PATH=$env:VITE_WEB_BASE_PATH `
             .
 
       - name: Deploy (recreate container with the new image)
         run: |
-          cd "$COMPOSE_DIR"
+          Set-Location $env:COMPOSE_DIR
           docker compose up -d web
 
       - name: Health check
         run: |
-          sleep 3
-          curl -f http://localhost:5173/patchwork/web/
+          Start-Sleep -Seconds 3
+          $response = Invoke-WebRequest -Uri "http://localhost:5173/patchwork/web/" -UseBasicParsing
+          if ($response.StatusCode -ne 200) {
+            throw "Health check failed: $($response.StatusCode)"
+          }
+          Write-Output "Health check OK"
